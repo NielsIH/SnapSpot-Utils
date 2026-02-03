@@ -151,16 +151,24 @@ export async function promptForDirectory (message, options = {}) {
  * }
  */
 export async function promptForConfirmation (message, defaultValue = false) {
-  const answer = await inquirer.prompt([
+  const defaultText = defaultValue ? 'Y/n' : 'y/N'
+  const { confirmed } = await inquirer.prompt([
     {
-      type: 'confirm',
+      type: 'input',
       name: 'confirmed',
-      message,
-      default: defaultValue
+      message: `${message} (${defaultText})`,
+      default: defaultValue ? 'y' : 'n',
+      validate: (input) => {
+        const lower = input.toLowerCase()
+        if (lower === 'y' || lower === 'yes' || lower === 'n' || lower === 'no') {
+          return true
+        }
+        return 'Please enter y/yes or n/no'
+      },
+      transformer: (input) => input.toLowerCase()
     }
   ])
-
-  return answer.confirmed
+  return confirmed.toLowerCase().startsWith('y')
 }
 
 /**
@@ -183,7 +191,7 @@ export async function promptForChoice (message, choices, options = {}) {
 
   const answer = await inquirer.prompt([
     {
-      type: 'list',
+      type: 'rawlist',
       name: 'choice',
       message,
       choices,

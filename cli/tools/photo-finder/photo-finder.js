@@ -22,13 +22,10 @@
 
 import fs from 'fs/promises'
 import path from 'path'
-import inquirer from 'inquirer'
+import { createInterface } from 'readline'
 import { loadExportFile } from '../../shared/export-loader.js'
 import { findFilesByName } from '../../shared/file-finder.js'
 import {
-  promptForFile,
-  promptForConfirmation,
-  promptForChoice,
   displaySuccess,
   displayError,
   displayInfo,
@@ -372,11 +369,18 @@ export function generateInternalManifest (results) {
  * Run Photo Finder in interactive mode
  */
 async function runInteractive () {
+  const rl = createInterface({
+    input: process.stdin,
+    output: process.stdout
+  })
+
   displayHeader('SnapSpot Photo Finder - Interactive Mode')
 
   // Step 1: Prompt for export file
-  const exportPath = await promptForFile('Select SnapSpot export file:', {
-    allowedExtensions: ['.json']
+  const exportPath = await new Promise((resolve) => {
+    rl.question('Select SnapSpot export file: ', (answer) => {
+      resolve(path.resolve(answer.trim()))
+    })
   })
 
   // Load and display summary
@@ -391,14 +395,11 @@ async function runInteractive () {
 
   // Step 2: Prompt for search directories
   displayInfo('Enter directories to search (comma-separated):')
-  const { searchDirs } = await inquirer.prompt([
-    {
-      type: 'input',
-      name: 'searchDirs',
-      message: 'Search directories:',
-      validate: input => input.trim().length > 0 || 'At least one directory required'
-    }
-  ])
+  const searchDirs = await new Promise((resolve) => {
+    rl.question('Search directories: ', (answer) => {
+      resolve(answer.trim())
+    })
+  })
 
   const searchPaths = searchDirs.split(',').map(s => s.trim())
 
@@ -435,26 +436,37 @@ async function runInteractive () {
   console.log('')
 
   // Step 5: Offer to save report
-  const saveReport = await promptForConfirmation('Save summary report?', true)
+  const saveReportAnswer = await new Promise((resolve) => {
+    rl.question('Save summary report? (Y/n) ', (answer) => {
+      resolve(answer.trim().toLowerCase())
+    })
+  })
+
+  const saveReport = saveReportAnswer === '' || saveReportAnswer.startsWith('y')
 
   if (saveReport) {
-    const format = await promptForChoice('Select report format:', [
-      { name: 'HTML (recommended)', value: 'html' },
-      { name: 'JSON', value: 'json' },
-      { name: 'Text', value: 'text' }
-    ])
+    console.log('Available formats:')
+    console.log('1. HTML (recommended)')
+    console.log('2. JSON')
+    console.log('3. Text')
+    const formatInput = await new Promise((resolve) => {
+      rl.question('Enter format number (1-3): ', (answer) => {
+        resolve(answer.trim())
+      })
+    })
+
+    const formatMap = { 1: 'html', 2: 'json', 3: 'text' }
+    const format = formatMap[formatInput] || 'html'
 
     const exportDir = path.dirname(results.exportPath)
     const sanitizedMapName = results.mapName.replace(/[^a-z0-9_-]/gi, '_')
     const defaultName = path.join(exportDir, `${sanitizedMapName}_photo_finder_report.${format}`)
-    const { reportPath } = await inquirer.prompt([
-      {
-        type: 'input',
-        name: 'reportPath',
-        message: 'Report file path:',
-        default: defaultName
-      }
-    ])
+
+    const reportPath = await new Promise((resolve) => {
+      rl.question(`Report file path (${defaultName}): `, (answer) => {
+        resolve(answer.trim() || defaultName)
+      })
+    })
 
     // Combine missing and duplicates for details section
     const detailRows = []
@@ -495,21 +507,27 @@ async function runInteractive () {
   }
 
   // Step 6: Offer to save log file
-  const saveLog = await promptForConfirmation('Save detailed log file?', true)
+  const saveLogAnswer = await new Promise((resolve) => {
+    rl.question('Save detailed log file? (Y/n) ', (answer) => {
+      resolve(answer.trim().toLowerCase())
+    })
+  })
+
+  const saveLog = saveLogAnswer === '' || saveLogAnswer.startsWith('y')
 
   if (saveLog) {
-    const { logPath } = await inquirer.prompt([
-      {
-        type: 'input',
-        name: 'logPath',
-        message: 'Log file path:',
-        default: `${results.mapName.replace(/[^a-z0-9_-]/gi, '_')}_photo_log.txt`
-      }
-    ])
+    const defaultLogName = `${results.mapName.replace(/[^a-z0-9_-]/gi, '_')}_photo_log.txt`
+    const logPath = await new Promise((resolve) => {
+      rl.question(`Log file path (${defaultLogName}): `, (answer) => {
+        resolve(answer.trim() || defaultLogName)
+      })
+    })
 
     await generateLogFile(results, logPath)
     displaySuccess(`Log file saved to: ${logPath}`)
   }
+
+  rl.close()
 
   // Step 7: Suggest Organizer tool if appropriate
   if (results.found.length > 0) {
