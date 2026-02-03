@@ -1,0 +1,38 @@
+{
+  "name": "@snapspot/cli-tools",
+  "version": "1.0.0",
+  "description": "Command-line utilities for batch operations on SnapSpot exports and photos",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "photo-finder": "node tools/photo-finder/photo-finder.js",
+    "export-transformer": "node tools/export-transformer/export-transformer.js",
+    "organizer": "node tools/organizer/organizer.js",
+    "lint": "standard",
+    "lint:fix": "standard --fix"
+  },
+  "keywords": [
+    "snapspot",
+    "cli",
+    "photo",
+    "export",
+    "batch",
+    "utilities"
+  ],
+  "author": "SnapSpot Contributors",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "inquirer": "^9.2.12",
+    "chalk": "^5.3.0",
+    "cli-progress": "^3.12.0",
+    "glob": "^10.3.10",
+    "commander": "^11.1.0",
+    "fs-extra": "^11.2.0"
+  },
+  "devDependencies": {
+    "standard": "^17.1.0"
+  }
+}
