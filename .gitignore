@@ -19,7 +19,7 @@ QWEN.md
 .qwen/
 .github/
 package-lock.json
-package.json
+/package.json
 
 # Node modules (if you add build tools later)
 node_modules/

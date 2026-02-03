@@ -14,9 +14,9 @@ Point to the phase-specific implementation document:
 - **Phase 3:** `docs/IMPLEMENTATION_PHASE_3.md` ← ✅ COMPLETE
 - **Phase 4:** `docs/IMPLEMENTATION_PHASE_4.md` ← ✅ COMPLETE
 - **Phase 5:** `docs/IMPLEMENTATION_PHASE_5.md` ← ✅ COMPLETE
-- **Phase 6:** `docs/IMPLEMENTATION_PHASE_6.md` ← ⏳ NEXT (Map Migrator Testing & Polish)
-- **Phase 7:** `docs/IMPLEMENTATION_PHASE_7.md` ← ⏳ PLANNED (Node.js CLI Utilities - Overview)
-  - **Phase 7A:** `docs/PHASE_7A_CLI_FOUNDATION.md` (CLI Foundation & Shared Utilities)
+- **Phase 6:** `docs/IMPLEMENTATION_PHASE_6.md` ← ⏳ DEFERRED (Map Migrator Testing & Polish - will complete later)
+- **Phase 7:** `docs/IMPLEMENTATION.md` ← 🔄 IN PROGRESS (Node.js CLI Utilities - Overview)
+  - **Phase 7A:** `docs/PHASE_7A_CLI_FOUNDATION.md` ← ✅ COMPLETE (CLI Foundation & Shared Utilities)
   - **Phase 7B:** `docs/PHASE_7B_PHOTO_FINDER.md` (Photo Finder Tool)
   - **Phase 7C:** `docs/PHASE_7C_EXPORT_TRANSFORMER.md` (Export Transformer Tool)
   - **Phase 7D:** `docs/PHASE_7D_ORGANIZER.md` (Organizer Tool)
