@@ -544,14 +544,26 @@ async function runInteractive () {
 }
 
 /**
+ * Sanitize map name for use in filenames
+ * Removes invalid filename characters and replaces spaces with underscores
+ */
+function sanitizeFilename (name) {
+  return name
+    .replace(/[<>:"/\\|?*]/g, '') // Remove invalid filename chars
+    .replace(/\s+/g, '_') // Replace spaces with underscores
+    .trim()
+}
+
+/**
  * Run Photo Finder in CLI mode
  */
 async function runCli (args) {
   const exportPath = args.export
   const searchPaths = args.search.split(',').map(s => s.trim())
-  const reportPath = args.report
-  const logPath = args.log
-  const format = args.format || 'text'
+  const outputDir = args.outputDir
+  const reportFlag = args.report // Boolean or path
+  const logFlag = args.log // Boolean or path
+  const format = args.format || 'html'
   const quiet = args.quiet || false
   const caseSensitive = args.caseSensitive || false
   const maxDepth = args.maxDepth || Infinity
@@ -588,11 +600,21 @@ async function runCli (args) {
   }
 
   // Save report if requested
-  if (reportPath) {
-    // If reportPath is just a filename, save in export directory
-    const finalReportPath = path.isAbsolute(reportPath) || reportPath.includes(path.sep)
-      ? reportPath
-      : path.join(path.dirname(results.exportPath), reportPath)
+  if (reportFlag !== undefined) {
+    let reportPath
+
+    // Determine report path
+    if (typeof reportFlag === 'string') {
+      // Explicit path provided
+      reportPath = reportFlag
+    } else {
+      // Auto-generate filename based on map name
+      const sanitizedMapName = sanitizeFilename(results.mapName)
+      const reportFilename = `${sanitizedMapName}_photo_finder_report.${format}`
+      reportPath = outputDir
+        ? path.join(outputDir, reportFilename)
+        : reportFilename
+    }
 
     // Combine missing and duplicates for details section
     const detailRows = []
@@ -628,19 +650,29 @@ async function runCli (args) {
       reportContent = generateTextReport(reportData)
     }
 
-    await writeReportToFile(reportContent, finalReportPath)
-    if (!quiet) displaySuccess(`Report saved to: ${finalReportPath}`)
+    await writeReportToFile(reportContent, reportPath)
+    if (!quiet) displaySuccess(`Report saved to: ${reportPath}`)
   }
 
   // Save log file if requested
-  if (logPath) {
-    // If logPath is just a filename, save in export directory
-    const finalLogPath = path.isAbsolute(logPath) || logPath.includes(path.sep)
-      ? logPath
-      : path.join(path.dirname(results.exportPath), logPath)
+  if (logFlag !== undefined) {
+    let logPath
 
-    await generateLogFile(results, finalLogPath)
-    if (!quiet) displaySuccess(`Log file saved to: ${finalLogPath}`)
+    // Determine log path
+    if (typeof logFlag === 'string') {
+      // Explicit path provided
+      logPath = logFlag
+    } else {
+      // Auto-generate filename based on map name
+      const sanitizedMapName = sanitizeFilename(results.mapName)
+      const logFilename = `${sanitizedMapName}_photo_finder_log.txt`
+      logPath = outputDir
+        ? path.join(outputDir, logFilename)
+        : logFilename
+    }
+
+    await generateLogFile(results, logPath)
+    if (!quiet) displaySuccess(`Log file saved to: ${logPath}`)
   }
 
   // Exit with appropriate code
@@ -670,9 +702,10 @@ USAGE:
 OPTIONS:
   --export <path>         Path to SnapSpot export JSON file
   --search <paths>        Comma-separated search directory paths
-  --report <path>         Save summary report to file
-  --format <type>         Report format: json, text, html (default: text)
-  --log <path>            Save detailed log file with full paths
+  --output-dir <path>     Output directory for report and log files (optional)
+  --report [path]         Save summary report (auto-generates filename, or specify custom path)
+  --format <type>         Report format: json, text, html (default: html)
+  --log [path]            Save detailed log file (auto-generates filename, or specify custom path)
   --case-sensitive        Use case-sensitive filename matching
   --max-depth <n>         Maximum search depth (default: unlimited)
   --quiet                 Minimal output
@@ -682,14 +715,17 @@ EXAMPLES:
   # Interactive mode (recommended for first-time users)
   photo-finder
 
-  # Find photos and save HTML report
-  photo-finder --export data.json --search /photos --report report.html --format html
+  # Find photos and save HTML report (auto-generates filename based on map name)
+  photo-finder --export data.json --search /photos --output-dir ./output --report --format html
 
   # Search multiple directories
-  photo-finder --export data.json --search "/photos,/backup/photos"
+  photo-finder --export data.json --search "/photos,/backup/photos" --report
 
-  # Save detailed log file
-  photo-finder --export data.json --search /photos --log photo-paths.txt
+  # Save detailed log file (auto-generates filename)
+  photo-finder --export data.json --search /photos --log
+
+  # Custom report and log paths
+  photo-finder --export data.json --search /photos --report ./my-report.html --log ./my-log.txt
 
   # Case-sensitive search with depth limit
   photo-finder --export data.json --search /photos --case-sensitive --max-depth 3
@@ -720,12 +756,26 @@ function parseArgs () {
       parsed.export = args[++i]
     } else if (arg === '--search') {
       parsed.search = args[++i]
+    } else if (arg === '--output-dir') {
+      parsed.outputDir = args[++i]
     } else if (arg === '--report') {
-      parsed.report = args[++i]
+      // Check if next arg is a value or another flag
+      const nextArg = args[i + 1]
+      if (nextArg && !nextArg.startsWith('--')) {
+        parsed.report = args[++i] // Path provided
+      } else {
+        parsed.report = true // Boolean flag
+      }
     } else if (arg === '--format') {
       parsed.format = args[++i]
     } else if (arg === '--log') {
-      parsed.log = args[++i]
+      // Check if next arg is a value or another flag
+      const nextArg = args[i + 1]
+      if (nextArg && !nextArg.startsWith('--')) {
+        parsed.log = args[++i] // Path provided
+      } else {
+        parsed.log = true // Boolean flag
+      }
     } else if (arg === '--case-sensitive') {
       parsed.caseSensitive = true
     } else if (arg === '--max-depth') {

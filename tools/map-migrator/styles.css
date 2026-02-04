@@ -45,6 +45,18 @@
   opacity: 0.9;
 }
 
+/* Modal help content */
+.modal-help-content {
+  text-align: left;
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+/* Button spacing */
+.btn-close-modal {
+  margin-top: 20px;
+}
+
 /* Show warning on small screens, hide app */
 @media (max-width: 1279px) {
   .desktop-warning {

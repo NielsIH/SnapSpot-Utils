@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Configuration - SnapSpot Utilities</title>
+  <link rel="stylesheet" href="../../shared/styles/variables.css">
+  <link rel="stylesheet" href="../../shared/styles/common.css">
+  <link rel="stylesheet" href="../../shared/styles/utility.css">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="container">
+    <!-- Header -->
+    <header class="header">
+      <h1>⚙️ Configuration</h1>
+      <p class="subtitle">Configure common paths and settings for all utilities</p>
+      <nav class="breadcrumb">
+        <a href="../../index.html">← Back to Utilities</a>
+      </nav>
+    </header>
+
+    <!-- Main Content -->
+    <main class="content">
+      <!-- Info Box -->
+      <div class="info-box">
+        <strong>💡 About Configuration</strong>
+        <p>
+          Save your commonly used paths here so you don't have to enter them every time you use a utility. 
+          Configuration is stored in your browser's localStorage and persists across sessions.
+        </p>
+      </div>
+
+      <!-- Configuration Form -->
+      <section class="card">
+        <h2>Path Configuration</h2>
+        
+        <div class="form-group">
+          <label for="exports-dir">
+            <strong>SnapSpot Exports Directory</strong>
+            <span class="label-help">Directory where your SnapSpot export files are stored</span>
+          </label>
+          <div class="path-input-wrapper">
+            <input type="text" id="exports-dir" placeholder="e.g., C:\Users\Name\Documents\SnapSpot\Exports" class="path-input" />
+            <button id="browse-exports-btn" class="btn btn-secondary btn-icon">📁 Browse</button>
+          </div>
+          <div class="help-text">Example: C:\Users\YourName\Documents\SnapSpot\Exports</div>
+        </div>
+
+        <div class="form-group">
+          <label for="photos-dir">
+            <strong>Photos Directory</strong>
+            <span class="label-help">Default directory where your photos are stored</span>
+          </label>
+          <div class="path-input-wrapper">
+            <input type="text" id="photos-dir" placeholder="e.g., C:\Photos" class="path-input" />
+            <button id="browse-photos-btn" class="btn btn-secondary btn-icon">📁 Browse</button>
+          </div>
+          <div class="help-text">Example: C:\Photos or D:\Pictures\Field-Photos</div>
+        </div>
+
+        <div class="form-group">
+          <label for="output-dir">
+            <strong>Output Directory</strong>
+            <span class="label-help">Default directory for reports and generated files</span>
+          </label>
+          <div class="path-input-wrapper">
+            <input type="text" id="output-dir" placeholder="e.g., C:\SnapSpot-Output" class="path-input" />
+            <button id="browse-output-btn" class="btn btn-secondary btn-icon">📁 Browse</button>
+          </div>
+          <div class="help-text">Example: C:\SnapSpot-Output (leave empty to use ./output as default)</div>
+        </div>
+
+        <div class="form-group">
+          <label for="organizer-dir">
+            <strong>Organizer Directory</strong>
+            <span class="label-help">Directory for organized/sorted photos (used by photo organizer tool)</span>
+          </label>
+          <div class="path-input-wrapper">
+            <input type="text" id="organizer-dir" placeholder="e.g., C:\Organized-Photos" class="path-input" />
+            <button id="browse-organizer-btn" class="btn btn-secondary btn-icon">📁 Browse</button>
+          </div>
+          <div class="help-text">Example: C:\Organized-Photos</div>
+        </div>
+
+        <div class="button-group">
+          <button id="save-btn" class="btn btn-primary">💾 Save Configuration</button>
+          <button id="reset-btn" class="btn btn-secondary">🔄 Reset to Defaults</button>
+        </div>
+
+        <div id="save-message" class="message hidden"></div>
+      </section>
+
+      <!-- Advanced Options -->
+      <section class="card">
+        <h2>Advanced Options</h2>
+        
+        <div class="form-group">
+          <label><strong>Export/Import Configuration</strong></label>
+          <p class="help-text">Backup your configuration or transfer it to another browser</p>
+          
+          <div class="button-group">
+            <button id="export-btn" class="btn btn-secondary">📤 Export Config</button>
+            <button id="import-btn" class="btn btn-secondary">📥 Import Config</button>
+            <input type="file" id="import-file" accept=".json" class="file-input-hidden" />
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label><strong>Configuration Status</strong></label>
+          <div class="status-box">
+            <div class="status-item">
+              <span class="status-label">Last Updated:</span>
+              <span id="last-updated" class="status-value">Never</span>
+            </div>
+            <div class="status-item">
+              <span class="status-label">Storage Available:</span>
+              <span id="storage-status" class="status-value">Checking...</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Help Section -->
+      <section class="card">
+        <h2>💡 Tips</h2>
+        
+        <ul class="tips-list">
+          <li>
+            <strong>Finding Full Paths:</strong> In Windows File Explorer, navigate to the folder, click the address bar, and copy the full path.
+          </li>
+          <li>
+            <strong>Browse Buttons:</strong> Click Browse to open a helper dialog with instructions for finding paths.
+          </li>
+          <li>
+            <strong>Portable Paths:</strong> If you use the utilities on multiple computers, you can export your configuration and import it on another machine.
+          </li>
+          <li>
+            <strong>Privacy:</strong> All configuration is stored locally in your browser. Nothing is sent to any server.
+          </li>
+          <li>
+            <strong>Path Formats:</strong> Use backslashes (\) for Windows paths or forward slashes (/) for Mac/Linux paths.
+          </li>
+        </ul>
+      </section>
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+      <p>SnapSpot Utilities | Configuration v1.0</p>
+    </footer>
+  </div>
+
+  <script type="module" src="config-ui.js"></script>
+</body>
+</html>

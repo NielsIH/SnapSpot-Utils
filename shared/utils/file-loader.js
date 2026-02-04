@@ -5,6 +5,8 @@
  * Handles loading files as text, data URLs, blobs, and images.
  */
 
+/* global FileReader, Image */
+
 /**
  * File loading and validation utilities
  */

@@ -390,7 +390,7 @@ const integrationTests = {
           { x: 200, y: 0 }
         ]
 
-        const { matrix, isDegenerate } = calculateAffineMatrix(source, target)
+        const { isDegenerate } = calculateAffineMatrix(source, target)
         const distribution = validatePointDistribution(source)
 
         // Should detect problems

@@ -6,6 +6,7 @@
   <title>Map Migrator - SnapSpot Utilities</title>
   <link rel="stylesheet" href="../../shared/styles/variables.css">
   <link rel="stylesheet" href="../../shared/styles/common.css">
+  <link rel="stylesheet" href="../../shared/styles/utility.css">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -44,11 +45,11 @@
               <p class="drop-text">Drop SnapSpot export file here</p>
               <p class="drop-hint">(.json file from SnapSpot app)</p>
               <button class="btn btn-secondary" id="source-file-btn">Or Browse Files</button>
-              <input type="file" id="source-file-input" accept=".json" style="display: none;">
+              <input type="file" id="source-file-input" accept=".json" class="file-input-hidden">
             </div>
           </div>
           <canvas id="source-canvas"></canvas>
-          <div class="map-info" id="source-info" style="display: none;">
+          <div class="map-info hidden" id="source-info">
             <span class="info-label">Map:</span>
             <span class="info-value" id="source-name">-</span>
             <span class="info-label">Size:</span>
@@ -70,17 +71,17 @@
               <p class="drop-text">Drop new map image or export file here</p>
               <p class="drop-hint">(.jpg, .png, .webp, or .json)</p>
               <button class="btn btn-secondary" id="target-file-btn">Or Browse Files</button>
-              <input type="file" id="target-file-input" accept="image/*,.json" style="display: none;">
+              <input type="file" id="target-file-input" accept="image/*,.json" class="file-input-hidden">
             </div>
           </div>
           <canvas id="target-canvas"></canvas>
-          <div class="map-info" id="target-info" style="display: none;">
+          <div class="map-info hidden" id="target-info">
             <span class="info-label">Map:</span>
             <span class="info-value" id="target-name">-</span>
             <span class="info-label">Size:</span>
             <span class="info-value" id="target-size">-</span>
-            <span class="info-label" id="target-markers-label" style="display: none;">Markers:</span>
-            <span class="info-value" id="target-markers" style="display: none;">-</span>
+            <span class="info-label hidden" id="target-markers-label">Markers:</span>
+            <span class="info-value hidden" id="target-markers">-</span>
             <button class="change-map-btn" id="change-target-btn" title="Load a different target map">Change Map</button>
           </div>
         </div>
@@ -147,7 +148,7 @@
         </div>
       </div>
       
-      <div class="warnings-section" id="warnings" style="display: none;">
+      <div class="warnings-section hidden" id="warnings">
         <h3>⚠ Warnings</h3>
         <ul id="warnings-list"></ul>
       </div>
@@ -176,7 +177,7 @@
   <div id="help-modal" class="modal hidden">
     <div class="modal-content">
       <h2>How to Use Map Migrator</h2>
-      <div style="text-align: left; max-width: 600px; margin: 0 auto;">
+      <div class="modal-help-content">
         <h3>Step 1: Load Files</h3>
         <ul>
           <li>Drop your SnapSpot export (.json) on the left panel</li>
@@ -243,7 +244,7 @@
           <li><kbd>Ctrl+S</kbd> - Generate export</li>
         </ul>
       </div>
-      <button class="btn" id="close-help" style="margin-top: 20px;">Close</button>
+      <button class="btn btn-close-modal" id="close-help">Close</button>
     </div>
   </div>
 

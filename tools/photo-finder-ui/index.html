@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Photo Finder - SnapSpot Utilities</title>
+  <link rel="stylesheet" href="../../shared/styles/variables.css">
+  <link rel="stylesheet" href="../../shared/styles/common.css">
+  <link rel="stylesheet" href="../../shared/styles/utility.css">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="container">
+    <!-- Header -->
+    <header class="header">
+      <h1>📸 Photo Finder</h1>
+      <p class="subtitle">Generate CLI command to search for photos and validate SnapSpot export (read-only validation tool)</p>
+      <nav class="breadcrumb">
+        <a href="../../index.html">← Back to Utilities</a>
+        <span class="separator">|</span>
+        <a href="../config/index.html">⚙️ Configuration</a>
+      </nav>
+    </header>
+
+    <!-- Main Content -->
+    <main class="content">
+      <!-- Step 1: Input Selection -->
+      <section class="card">
+        <h2>1. Select Input Files</h2>
+        
+        <div class="form-group">
+          <label for="export-file-path">SnapSpot Export File (.json)</label>
+          <div class="path-input-wrapper">
+            <input type="text" id="export-file-path" placeholder="Enter full path (e.g., C:\Users\Name\Documents\export.json)" class="path-input" />
+            <button id="browse-export-btn" class="btn btn-secondary btn-icon" title="Browse for file to append to configured path">📁 Browse</button>
+            <input type="file" id="export-file" accept=".json" class="file-input-hidden" />
+          </div>
+          <div class="file-info" id="export-file-info">
+            Enter the full path to your SnapSpot export file
+            <a href="../config/index.html" class="config-link">or configure default paths →</a>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="photo-dir-path">Search Directory</label>
+          <div class="path-input-wrapper">
+            <input type="text" id="photo-dir-path" placeholder="Enter full path (e.g., C:\Photos\Trip2024)" class="path-input" />
+            <button id="browse-dir-btn" class="btn btn-secondary btn-icon" title="Browse for folder to append to configured path">📁 Browse</button>
+            <input type="file" id="photo-dir-input" webkitdirectory directory multiple class="file-input-hidden" />
+          </div>
+          <div class="help-text">Directory to search for photos (supports comma-separated paths)</div>
+        </div>
+
+        <div class="form-group">
+          <label for="output-dir">Output Directory (optional)</label>
+          <div class="path-input-wrapper">
+            <input type="text" id="output-dir" placeholder="Enter full path (e.g., C:\Output)" class="path-input" />
+            <button id="browse-output-btn" class="btn btn-secondary btn-icon" title="Browse for folder to append to configured path">📁 Browse</button>
+            <input type="file" id="output-dir-input" webkitdirectory directory multiple class="file-input-hidden" />
+          </div>
+          <div class="help-text">Where to save report and log files (leave empty for current directory)</div>
+        </div>
+      </section>
+
+      <!-- Step 2: Options -->
+      <section class="card">
+        <h2>2. Configure Options</h2>
+        
+        <div class="form-group">
+          <label for="report-format">Report Format</label>
+          <select id="report-format" class="select-input">
+            <option value="html">HTML (.html) - Professional presentation</option>
+            <option value="json">JSON (.json) - Machine-readable data</option>
+            <option value="text">Text (.txt) - Plain text report</option>
+          </select>
+          <div class="help-text">Format for summary report (saved to output directory)</div>
+        </div>
+
+        <div class="form-group">
+          <label class="checkbox-label">
+            <input type="checkbox" id="save-log" checked />
+            <span>Save detailed log file</span>
+          </label>
+          <div class="help-text">Generates per-marker photo paths log (photo-log.txt)</div>
+        </div>
+
+        <div class="form-group">
+          <label for="max-depth">Maximum Search Depth (optional)</label>
+          <input type="number" id="max-depth" placeholder="Unlimited" class="text-input" min="1" />
+          <div class="help-text">Limit how deep to search subdirectories (leave empty for unlimited)</div>
+        </div>
+
+        <div class="form-group">
+          <label class="checkbox-label">
+            <input type="checkbox" id="case-sensitive" />
+            <span>Case-sensitive filename matching</span>
+          </label>
+          <div class="help-text">Default is case-insensitive (img_1234.jpg matches IMG_1234.JPG)</div>
+        </div>
+      </section>
+
+      <!-- Step 3: Generated Command -->
+      <section class="card">
+        <h2>3. Generated Command</h2>
+        
+        <div class="command-wrapper">
+          <pre id="generated-command" class="command-display">Configure options above to generate command...</pre>
+          <button id="copy-command-btn" class="btn btn-primary" disabled>📋 Copy Command</button>
+        </div>
+
+        <div class="info-box">
+          <strong>How to use:</strong>
+          <ol>
+            <li><strong>Configure default paths</strong> on the <a href="../config/index.html">Configuration page</a> (one-time setup)</li>
+            <li>Use the <strong>Browse buttons</strong> to select files/folders - they will be appended to your configured base paths</li>
+            <li>Alternatively, enter <strong>full paths</strong> directly in the input fields</li>
+            <li>Configure your search options</li>
+            <li>Copy the generated command using the button below</li>
+            <li>Open PowerShell/Terminal in the <code>cli</code> directory of this project</li>
+            <li>Paste and run the command</li>
+            <li>After completion, drag the report and log files to Step 4 to view them</li>
+          </ol>
+          <div class="info-box mt-2">
+            💡 <strong>Tip:</strong> Configure your default paths on the <a href="../config/index.html">Configuration page</a> first. Then the Browse buttons will append selected files/folders to those base paths automatically.
+          </div>
+          <div class="info-box warning mt-2">
+            ⚠️ <strong>Note:</strong> Photo Finder is <strong>read-only</strong> and does NOT copy or modify files. To organize photos into an archive, use the <strong>Organizer tool</strong> after validation.
+          </div>
+        </div>
+      </section>
+
+      <!-- Step 4: Results Viewer -->
+      <section class="card">
+        <h2>4. View Results</h2>
+        
+        <div class="results-tabs">
+          <button class="tab-btn active" data-tab="report">Report</button>
+          <button class="tab-btn" data-tab="log">Log</button>
+        </div>
+
+        <div class="drop-zone" id="report-drop-zone">
+          <div class="drop-zone-content">
+            <div class="drop-icon">📄</div>
+            <p>Drag and drop report file here</p>
+            <p class="help-text">or</p>
+            <input type="file" id="report-file" accept=".html,.json,.txt" />
+            <label for="report-file" class="btn btn-secondary">Choose File</label>
+          </div>
+        </div>
+
+        <div class="drop-zone hidden" id="log-drop-zone">
+          <div class="drop-zone-content">
+            <div class="drop-icon">📋</div>
+            <p>Drag and drop log file here</p>
+            <p class="help-text">or</p>
+            <input type="file" id="log-file" accept=".log,.txt" />
+            <label for="log-file" class="btn btn-secondary">Choose File</label>
+          </div>
+        </div>
+
+        <div id="report-viewer" class="viewer hidden">
+          <div class="viewer-header">
+            <h3 id="report-filename"></h3>
+            <button id="close-report" class="btn btn-small">✕ Close</button>
+          </div>
+          <div id="report-content" class="viewer-content"></div>
+        </div>
+
+        <div id="log-viewer" class="viewer hidden">
+          <div class="viewer-header">
+            <h3 id="log-filename"></h3>
+            <button id="close-log" class="btn btn-small">✕ Close</button>
+          </div>
+          <pre id="log-content" class="viewer-content log-content"></pre>
+        </div>
+      </section>
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+      <p>SnapSpot Utilities | Photo Finder v1.0</p>
+    </footer>
+  </div>
+
+  <script type="module" src="ui-controller.js"></script>
+</body>
+</html>

@@ -4,6 +4,35 @@
 
 ---
 
+## Critical Rule: ALL Work Must Be Tracked
+
+**BEFORE starting ANY implementation work:**
+
+1. **Identify if this is planned work:**
+   - Is there a phase document for this? → Follow that phase
+   - Is this a new feature not in any phase? → Create a phase document first
+
+2. **Never implement without a phase document:**
+   - ❌ DON'T start coding because "it's a quick addition"
+   - ❌ DON'T build features outside the phase system
+   - ✅ DO create a phase document even for small features
+   - ✅ DO update WORKFLOW.md phase list if adding new phases
+
+3. **Track everything:**
+   - New browser utilities (like configuration pages)
+   - Modifications to existing tools (like adding config to photo-finder-ui)
+   - New shared modules (like config-manager.js)
+   - All deliverables must be listed in a phase document
+
+**If work is already done without a phase document:**
+1. Stop and create a phase document retroactively
+2. Document what was built, why, and what it delivers
+3. Update WORKFLOW.md phase list
+4. Mark the phase as complete with deliverables listed
+5. Commit with phase completion message
+
+---
+
 ## Starting a New Phase
 
 ### Step 1: Identify the Phase Document
@@ -21,6 +50,7 @@ Point to the phase-specific implementation document:
   - **Phase 7C:** `docs/PHASE_7C_EXPORT_TRANSFORMER.md` ← ⏳ NEXT (Export Transformer Tool)
   - **Phase 7D:** `docs/PHASE_7D_ORGANIZER.md` (Organizer Tool)
   - **Phase 7E:** `docs/PHASE_7E_TESTING_POLISH.md` (Testing & Polish)
+- **Browser Utilities:** `docs/PHASE_BROWSER_CONFIG.md` ← ✅ COMPLETE (Configuration System with localStorage)
 
 ### Step 2: Verify Phase Document Structure
 
