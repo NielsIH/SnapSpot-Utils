@@ -448,6 +448,95 @@ git tag v1.0-phase-x-complete
 
 ---
 
+## Changes After Phase Completion
+
+**When making changes to a completed phase:**
+
+Sometimes you need to modify or enhance a phase after it's marked complete. **ALL changes must be documented** to maintain project history and context.
+
+### When This Applies
+
+- Bug fixes in completed phase code
+- Feature enhancements requested after completion
+- Refactoring or optimization of existing code
+- UI/UX improvements to completed tools
+- Any modification to files created in a completed phase
+
+### Documentation Process
+
+1. **Add a "Post-Completion Changes" section** to the phase document (before "Next Steps")
+
+2. **Document each change with:**
+   - Date of change
+   - Clear description of what was changed and why
+   - Files modified
+   - Testing status
+   - Impact on existing functionality
+
+3. **Use this template:**
+
+```markdown
+## Post-Completion Changes
+
+**Date:** [Date]
+
+### Change 1: [Brief Title]
+
+**Motivation:** [Why was this change needed?]
+
+**Changes Made:**
+- [Specific change 1]
+- [Specific change 2]
+- ...
+
+**Files Modified:**
+- `path/to/file1.js` (what was changed)
+- `path/to/file2.html` (what was changed)
+
+**Testing Status:**
+- ✅ Linting passed
+- ✅/⏳ Manual testing [status]
+
+**Impact:**
+- [How this affects existing functionality]
+- [What test scenarios need updating]
+
+---
+
+### Change 2: [Next Change]
+...
+```
+
+### Example
+
+See `docs/IMPLEMENTATION_PHASE_5.md` for a real example of documenting post-completion changes (map metadata display enhancement).
+
+### What NOT to Do
+
+❌ **DON'T** make changes without documenting them  
+❌ **DON'T** create separate change log files  
+❌ **DON'T** only update code without updating phase docs  
+❌ **DON'T** assume "small changes" don't need documentation
+
+✅ **DO** document all changes in the phase document  
+✅ **DO** include rationale and context  
+✅ **DO** update test scenarios if affected  
+✅ **DO** commit with descriptive message referencing the change
+
+### Git Commit for Post-Completion Changes
+
+```bash
+git add .
+git commit -m "fix: [Brief description] - Phase X
+
+[Detailed explanation of what was changed and why]
+
+Updated Phase X documentation with post-completion changes.
+See docs/IMPLEMENTATION_PHASE_X.md for details."
+```
+
+---
+
 ## Phase Transition Checklist
 
 Use this checklist when transitioning from Phase X to Phase Y:

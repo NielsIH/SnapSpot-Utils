@@ -467,22 +467,57 @@ export class MapMigrator {
           return
         }
 
-        // Perform merge with chosen strategy
-        exportData = mergeExports(state.targetExport, transformedExport, {
+        // Perform merge with chosen strategy (returns merged markers/photos, but map still needs proper structure)
+        const mergedData = mergeExports(state.targetExport, transformedExport, {
           duplicateStrategy,
           coordinateTolerance,
           duplicatePhotoStrategy: 'skip',
           preserveTimestamps: true
         })
 
-        // Update map metadata
-        exportData.map.lastModified = new Date().toISOString()
-        exportData.map.description = `Merged with ${sourceExport.map.name}`
+        // Get user-entered metadata
+        const targetMetadata = this.ui.getTargetMetadata()
+
+        // Create map metadata object for buildExport
+        const mergedMapMetadata = {
+          id: state.targetExport.map.id,
+          name: targetMetadata.name,
+          width: state.targetMap.width,
+          height: state.targetMap.height,
+          description: targetMetadata.description || `Merged with ${sourceExport.map.name}`,
+          created: state.targetExport.map.created || state.targetExport.map.createdDate,
+          fileName: state.targetMap.name
+        }
+
+        // Rebuild the export using buildExport to ensure proper JSON format with imageData
+        exportData = await buildExport(
+          mergedMapMetadata,
+          state.targetMap.blob, // Use target map image
+          mergedData.markers,
+          mergedData.photos,
+          {
+            sourceApp: 'SnapSpot Map Migrator',
+            preserveMapId: true
+          }
+        )
+
+        // Add metadata fields that buildExport doesn't handle
+        exportData.map.description = mergedMapMetadata.description
+        exportData.map.fileName = mergedMapMetadata.fileName
+        exportData.map.fileSize = state.targetMap.blob.size
+        exportData.map.fileType = state.targetMap.blob.type
+        exportData.map.isActive = true
+
+        // Convert to JSON string for download
+        const exportJson = JSON.stringify(exportData, null, 2)
 
         // Generate filename for merged export
         const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5)
-        const targetMapName = state.targetExport.map.name.replace(/[^a-z0-9]/gi, '_')
+        const targetMapName = targetMetadata.name.replace(/[^a-z0-9]/gi, '_')
         filename = `Snapspot_Migrator_Export_${targetMapName}_${timestamp}.json`
+
+        // Download file
+        this._downloadFile(exportJson, filename)
 
         // Show success message with merge statistics
         const successMessage = 'Merge completed successfully!\n\n' +
@@ -492,22 +527,21 @@ export class MapMigrator {
           `Merged: ${stats.duplicateMarkers} duplicate markers\n` +
           `Added: ${stats.newPhotos} new photos`
 
-        // Convert to JSON string for download
-        const exportJson = JSON.stringify(exportData, null, 2)
-        this._downloadFile(exportJson, filename)
-
         alert(successMessage)
       } else {
         // REPLACE MODE: Target is just an image, create new export
         console.log('Target is an image - using replace mode')
 
+        // Get user-entered metadata
+        const targetMetadata = this.ui.getTargetMetadata()
+
         // Create new map metadata object (without image data - that's passed separately)
         const newMap = {
           id: 'migrated-map',
-          name: `${sourceExport.map.name} (Migrated)`,
+          name: targetMetadata.name,
           width: state.targetMap.width,
           height: state.targetMap.height,
-          description: `Migrated from ${sourceExport.map.name}`,
+          description: targetMetadata.description || `Migrated from ${sourceExport.map.name}`,
           fileName: state.targetMap.name || 'target-map.png'
         }
 
@@ -539,7 +573,7 @@ export class MapMigrator {
 
         // Generate filename using target map name
         const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5)
-        const targetMapName = state.targetMap.name.replace(/\.[^.]+$/, '').replace(/[^a-z0-9]/gi, '_') // Remove extension and sanitize
+        const targetMapName = targetMetadata.name.replace(/[^a-z0-9]/gi, '_')
         filename = `Snapspot_Migrator_Export_${targetMapName}_${timestamp}.json`
 
         // Download file

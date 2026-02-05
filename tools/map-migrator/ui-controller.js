@@ -85,9 +85,12 @@ export class UIController {
     this.sourceInfo = document.getElementById('source-info')
     this.targetInfo = document.getElementById('target-info')
     this.sourceName = document.getElementById('source-name')
+    this.sourceDescription = document.getElementById('source-description')
+    this.sourceDescriptionRow = document.getElementById('source-description-row')
     this.sourceSize = document.getElementById('source-size')
     this.sourceMarkers = document.getElementById('source-markers')
-    this.targetName = document.getElementById('target-name')
+    this.targetNameInput = document.getElementById('target-name-input')
+    this.targetDescriptionInput = document.getElementById('target-description-input')
     this.targetSize = document.getElementById('target-size')
     this.targetMarkers = document.getElementById('target-markers')
     this.targetMarkersLabel = document.getElementById('target-markers-label')
@@ -299,6 +302,19 @@ export class UIController {
       this.sourceSize.textContent = `${actualWidth} × ${actualHeight}px`
       this.sourceMarkers.textContent = exportData.markers.length
 
+      // Show description if present
+      if (exportData.map.description && exportData.map.description.trim()) {
+        this.sourceDescription.textContent = exportData.map.description
+        this.sourceDescriptionRow.style.display = 'flex'
+      } else {
+        this.sourceDescriptionRow.style.display = 'none'
+      }
+
+      // If target is already loaded, auto-fill target name/description
+      if (this.state.targetMap) {
+        this._autoFillTargetMetadata()
+      }
+
       // Update canvas cursor
       this._updateCanvasCursors()
     } catch (error) {
@@ -380,11 +396,13 @@ export class UIController {
     // Update UI
     this._hideDropZone(this.targetDrop)
     this._showInfo(this.targetInfo)
-    this.targetName.textContent = exportData.map.name
     this.targetSize.textContent = `${actualWidth} × ${actualHeight}px`
     this.targetMarkers.textContent = exportData.markers.length
     this.targetMarkersLabel.style.display = 'inline'
     this.targetMarkers.style.display = 'inline'
+
+    // Auto-fill target name/description from source if available
+    this._autoFillTargetMetadata()
   }
 
   /**
@@ -418,10 +436,12 @@ export class UIController {
     // Update UI
     this._hideDropZone(this.targetDrop)
     this._showInfo(this.targetInfo)
-    this.targetName.textContent = file.name
     this.targetSize.textContent = `${dimensions.width} × ${dimensions.height}px`
     this.targetMarkersLabel.style.display = 'none'
     this.targetMarkers.style.display = 'none'
+
+    // Auto-fill target name/description from source if available
+    this._autoFillTargetMetadata()
   }
 
   /**
@@ -445,6 +465,41 @@ export class UIController {
 
       img.src = url
     })
+  }
+
+  /**
+   * Auto-fill target map name and description
+   * - If target is an export: use target export's name/description
+   * - If target is an image: use source export's name/description
+   * Only fills if the inputs are empty or this is the first load
+   * @private
+   */
+  _autoFillTargetMetadata () {
+    let fillName = ''
+    let fillDescription = ''
+
+    // Determine which values to use for auto-fill
+    if (this.state.targetExport) {
+      // Target is an export - use target export values
+      fillName = this.state.targetExport.map.name || 'Unnamed Map'
+      fillDescription = this.state.targetExport.map.description || ''
+    } else if (this.state.sourceExport) {
+      // Target is an image - use source export values
+      fillName = this.state.sourceExport.map.name || 'Unnamed Map'
+      fillDescription = this.state.sourceExport.map.description || ''
+    } else {
+      return // Neither source nor target loaded yet
+    }
+
+    // Auto-fill name if input is empty or has default value
+    if (!this.targetNameInput.value || this.targetNameInput.value.trim() === '') {
+      this.targetNameInput.value = fillName
+    }
+
+    // Auto-fill description if input is empty
+    if (!this.targetDescriptionInput.value || this.targetDescriptionInput.value.trim() === '') {
+      this.targetDescriptionInput.value = fillDescription
+    }
   }
 
   /**
@@ -930,7 +985,7 @@ export class UIController {
    * @private
    */
   _showInfo (infoPanel) {
-    infoPanel.style.display = 'flex'
+    infoPanel.classList.remove('hidden')
   }
 
   /**
@@ -1090,7 +1145,7 @@ export class UIController {
    * @private
    */
   _hideInfo (infoPanel) {
-    infoPanel.style.display = 'none'
+    infoPanel.classList.add('hidden')
   }
 
   /**
@@ -1177,6 +1232,17 @@ export class UIController {
    */
   getTargetRenderer () {
     return this.targetRenderer
+  }
+
+  /**
+   * Get target map metadata from user inputs
+   * @returns {Object} Target map name and description
+   */
+  getTargetMetadata () {
+    return {
+      name: this.targetNameInput.value.trim() || 'Unnamed Map',
+      description: this.targetDescriptionInput.value.trim() || ''
+    }
   }
 
   /**

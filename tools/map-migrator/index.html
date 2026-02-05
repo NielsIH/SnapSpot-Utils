@@ -50,13 +50,21 @@
           </div>
           <canvas id="source-canvas"></canvas>
           <div class="map-info hidden" id="source-info">
-            <span class="info-label">Map:</span>
-            <span class="info-value" id="source-name">-</span>
-            <span class="info-label">Size:</span>
-            <span class="info-value" id="source-size">-</span>
-            <span class="info-label">Markers:</span>
-            <span class="info-value" id="source-markers">-</span>
-            <button class="change-map-btn" id="change-source-btn" title="Load a different source map">Change Map</button>
+            <div class="info-row">
+              <span class="info-label">Map Name:</span>
+              <span class="info-value" id="source-name">-</span>
+            </div>
+            <div class="info-row" id="source-description-row" style="display: none;">
+              <span class="info-label">Description:</span>
+              <span class="info-value" id="source-description">-</span>
+            </div>
+            <div class="info-row">
+              <span class="info-label">Size:</span>
+              <span class="info-value" id="source-size">-</span>
+              <span class="info-label">Markers:</span>
+              <span class="info-value" id="source-markers">-</span>
+              <button class="change-map-btn" id="change-source-btn" title="Load a different source map">Change Map</button>
+            </div>
           </div>
         </div>
       </div>
@@ -76,21 +84,24 @@
           </div>
           <canvas id="target-canvas"></canvas>
           <div class="map-info hidden" id="target-info">
-            <span class="info-label">Map:</span>
-            <span class="info-value" id="target-name">-</span>
-            <span class="info-label">Size:</span>
-            <span class="info-value" id="target-size">-</span>
-            <span class="info-label hidden" id="target-markers-label">Markers:</span>
-            <span class="info-value hidden" id="target-markers">-</span>
-            <button class="change-map-btn" id="change-target-btn" title="Load a different target map">Change Map</button>
+            <div class="info-row">
+              <span class="info-label">Map Name:</span>
+              <input type="text" id="target-name-input" class="map-name-input" placeholder="Enter map name">
+            </div>
+            <div class="info-row">
+              <span class="info-label">Description:</span>
+              <input type="text" id="target-description-input" class="map-description-input" placeholder="Enter description (optional)">
+            </div>
+            <div class="info-row">
+              <span class="info-label">Size:</span>
+              <span class="info-value" id="target-size">-</span>
+              <span class="info-label hidden" id="target-markers-label">Markers:</span>
+              <span class="info-value hidden" id="target-markers">-</span>
+              <button class="change-map-btn" id="change-target-btn" title="Load a different target map">Change Map</button>
+            </div>
           </div>
         </div>
       </div>
-    </div>
-
-    <!-- Instructions -->
-    <div class="instructions">
-      <p><strong>Step 1:</strong> Load files (source export + target image or export) &nbsp;•&nbsp; <strong>Step 2:</strong> Place 3+ reference points (zoom: scroll, pan: Ctrl+drag) &nbsp;•&nbsp; <strong>Step 3:</strong> Calculate & export (merge or replace)</p>
     </div>
 
     <!-- Reference points table -->
