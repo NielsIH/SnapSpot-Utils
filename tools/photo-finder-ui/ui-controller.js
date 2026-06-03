@@ -14,6 +14,7 @@ class PhotoFinderUI {
     this.outputDirPath = ''
     this.reportFormat = 'html'
     this.saveLog = true
+    this.saveManifest = true
     this.maxDepth = ''
     this.caseSensitive = false
 
@@ -40,6 +41,7 @@ class PhotoFinderUI {
     // Option elements
     this.reportFormatSelect = document.getElementById('report-format')
     this.saveLogCheckbox = document.getElementById('save-log')
+    this.saveManifestCheckbox = document.getElementById('save-manifest')
     this.maxDepthInput = document.getElementById('max-depth')
     this.caseSensitiveCheckbox = document.getElementById('case-sensitive')
 
@@ -82,6 +84,7 @@ class PhotoFinderUI {
     // Options
     this.reportFormatSelect.addEventListener('change', () => this.updateCommand())
     this.saveLogCheckbox.addEventListener('change', () => this.updateCommand())
+    this.saveManifestCheckbox.addEventListener('change', () => this.updateCommand())
     this.maxDepthInput.addEventListener('input', () => this.updateCommand())
     this.caseSensitiveCheckbox.addEventListener('change', () => this.updateCommand())
 
@@ -251,6 +254,7 @@ class PhotoFinderUI {
     // Get current values
     this.reportFormat = this.reportFormatSelect.value
     this.saveLog = this.saveLogCheckbox.checked
+    this.saveManifest = this.saveManifestCheckbox.checked
     this.maxDepth = this.maxDepthInput.value.trim()
     this.caseSensitive = this.caseSensitiveCheckbox.checked
 
@@ -284,6 +288,11 @@ class PhotoFinderUI {
     // Log file (optional)
     if (this.saveLog) {
       parts.push('--log')
+    }
+
+    // Manifest file (recommended, enabled by default)
+    if (this.saveManifest) {
+      parts.push('--manifest')
     }
 
     // Max depth (optional)

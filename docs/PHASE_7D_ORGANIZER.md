@@ -21,6 +21,7 @@ Organizer creates organized directory structures containing SnapSpot exports and
 **Key Features:**
 - Multiple organization schemes (by-map, by-marker, by-date, etc.)
 - Internally invokes Photo Finder (zero duplicate search logic)
+- Reuses shared CLI prompts and a compact photo-search summary (no duplicated Photo Finder report UX)
 - Optional HTML index for browsing
 - Handles missing photos gracefully
 - Creates README explaining structure
@@ -32,6 +33,7 @@ Organizer creates organized directory structures containing SnapSpot exports and
 - [ ] `cli/tools/organizer/organizer.js` - Main tool
 - [ ] `cli/tools/organizer/schemes.js` - Organization schemes
 - [ ] `cli/tools/organizer/README.md` - Tool documentation
+- [ ] `cli/tools/organizer/preview.js` - Dry-run structure preview helpers
 - [ ] Unit tests for all organization schemes
 - [ ] Example workflows and usage documentation
 
@@ -55,11 +57,19 @@ Organizer creates organized directory structures containing SnapSpot exports and
 
 - [ ] Implement `invokePhotoFinder(exportPath, searchPaths)`
   - [ ] **Import Photo Finder as Node.js module (not spawn process)**
-  - [ ] Call Photo Finder's `generateInternalManifest()` function
-  - [ ] Pass export path and search directories
+  - [ ] Call `findPhotosForExport(exportPath, searchPaths, { quiet: true })`
+  - [ ] Call `generateInternalManifest(results)` with returned search results
   - [ ] Receive internal manifest (not saved to disk)
+  - [ ] Receive search summary (found/missing/duplicates/duration)
   - [ ] Return manifest with found photos and metadata
   - [ ] Handle Photo Finder errors gracefully
+
+- [ ] Enforce **no duplicate Photo Finder UX** in Organizer:
+  - [ ] Do not re-implement Photo Finder report/log generation in Organizer
+  - [ ] Do not re-implement Photo Finder diagnostic screens/details tables
+  - [ ] Show compact search summary only (found/missing/duplicates)
+  - [ ] If detailed diagnostics are needed, direct user to run `photo-finder --report --log`
+  - [ ] Reuse `cli/shared/prompt-helpers.js` for all Organizer prompts
 
 - [ ] Implement organization schemes (`schemes.js`):
   - [ ] `organizeByMap(exportData, foundPhotos, outputDir)`
@@ -95,7 +105,7 @@ Organizer creates organized directory structures containing SnapSpot exports and
 
 - [ ] Implement CLI mode with flags:
   - [ ] `--export <path>` - Export file path
-  - [ ] `--search <paths>` - Photo search directories (passed to Photo Finder)
+  - [ ] `--search <paths>` - Photo search directories (comma-separated, same contract as Photo Finder CLI)
   - [ ] `--output <path>` - Output directory
   - [ ] `--scheme <by-map|by-marker|by-date|categorized|flat>` - Organization scheme
   - [ ] `--create-index` - Generate browsable HTML index
@@ -140,7 +150,7 @@ organizer --export data.json --search /photos --output /archive --scheme by-map
 **Workflow 3: Organize with Multiple Search Paths**
 ```bash
 # Organizer passes all search paths to Photo Finder
-organizer --export data.json --search /photos /backup /external \
+organizer --export data.json --search "/photos,/backup,/external" \
   --output /archive --scheme by-date
 ```
 
@@ -168,6 +178,7 @@ organizer --export data.json --search /photos --output /archive \
 - [ ] **Invokes Photo Finder internally for photo search (no duplicate code)**
 - [ ] **Passes search directories to Photo Finder correctly**
 - [ ] **Handles Photo Finder errors gracefully**
+- [ ] **Does not duplicate Photo Finder report/log UX (Organizer only shows compact summary)**
 
 ---
 
@@ -176,11 +187,11 @@ organizer --export data.json --search /photos --output /archive \
 ### Unit Tests
 
 **Scenario 15: Organize by Map**
-- [ ] Export with 3 maps, 15 photos total
+- [ ] Export with 1 map, 15 photos total
 - [ ] Organizer invokes Photo Finder to search
 - [ ] Photo Finder finds all photos
 - [ ] Choose organize-by-map scheme
-- [ ] Creates 3 directories (one per map)
+- [ ] Creates 1 directory (for export map)
 - [ ] Photos and export in correct locations
 - [ ] README.txt created
 
@@ -217,6 +228,12 @@ organizer --export data.json --search /photos --output /archive \
 - [ ] Photos organized based on Photo Finder results
 - [ ] No files written by Photo Finder (internal only)
 
+**Scenario 21: No-Duplicate-UX Contract**
+- [ ] Run Organizer interactive mode with missing photos
+- [ ] Organizer shows compact summary (found/missing/duplicates)
+- [ ] Organizer does not generate Photo Finder-style diagnostics tables/log content
+- [ ] Organizer suggests `photo-finder --report --log` for full diagnostics
+
 ### Performance Tests
 - [ ] Organize 1000 photos: <30 seconds
 - [ ] Directory structure creation: <1 second
@@ -225,6 +242,8 @@ organizer --export data.json --search /photos --output /archive \
 ---
 
 ## Organization Scheme Examples
+
+Note: Current CLI flow processes one export per run (single map per export). Examples below are illustrative for directory shape.
 
 ### by-map
 ```
@@ -301,20 +320,43 @@ organizer --export data.json --search /photos --output /archive \
 ### Photo Finder Integration
 
 ```javascript
-import { generateInternalManifest } from '../photo-finder/photo-finder.js'
+import {
+  findPhotosForExport,
+  generateInternalManifest
+} from '../photo-finder/photo-finder.js'
 
 async function searchForPhotos(exportPath, searchPaths) {
   try {
     // Invoke Photo Finder programmatically (not spawn)
-    const manifest = await generateInternalManifest(exportPath, searchPaths)
+    const results = await findPhotosForExport(exportPath, searchPaths, {
+      quiet: true
+    })
+
+    const manifest = generateInternalManifest(results)
     
     // No files written - manifest is in-memory only
-    return manifest
+    return {
+      manifest,
+      summary: {
+        total: results.totalPhotos,
+        found: results.found.length,
+        missing: results.missing.length,
+        duplicates: results.duplicates.length,
+        duration: results.duration
+      }
+    }
   } catch (error) {
     throw new Error(`Photo search failed: ${error.message}`)
   }
 }
 ```
+
+### UX Boundary (Photo Finder vs Organizer)
+
+- Photo Finder remains the detailed diagnostics tool (reports, logs, deep missing-photo analysis).
+- Organizer remains the archive construction tool (scheme selection, copy operations, archive README/index).
+- Organizer shows only a compact photo-search summary and asks whether to continue.
+- Detailed validation UX is intentionally delegated to Photo Finder to avoid duplicated prompt/report maintenance.
 
 ### README.txt Template
 
@@ -338,7 +380,7 @@ Directory Structure:
   /marker-003-Office/
     - Photo files for marker 3
 
-Total Maps: 3
+Total Maps: 1
 Total Markers: 25
 Total Photos: 100
 

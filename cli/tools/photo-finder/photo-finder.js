@@ -563,6 +563,7 @@ async function runCli (args) {
   const outputDir = args.outputDir
   const reportFlag = args.report // Boolean or path
   const logFlag = args.log // Boolean or path
+  const manifestFlag = args.manifest // Boolean or path
   const format = args.format || 'html'
   const quiet = args.quiet || false
   const caseSensitive = args.caseSensitive || false
@@ -675,6 +676,25 @@ async function runCli (args) {
     if (!quiet) displaySuccess(`Log file saved to: ${logPath}`)
   }
 
+  // Save organizer manifest if requested
+  if (manifestFlag !== undefined) {
+    let manifestPath
+
+    if (typeof manifestFlag === 'string') {
+      manifestPath = manifestFlag
+    } else {
+      const sanitizedMapName = sanitizeFilename(results.mapName)
+      const manifestFilename = `${sanitizedMapName}_photo_manifest.json`
+      manifestPath = outputDir
+        ? path.join(outputDir, manifestFilename)
+        : manifestFilename
+    }
+
+    const manifest = generateInternalManifest(results)
+    await fs.writeFile(manifestPath, JSON.stringify(manifest, null, 2), 'utf-8')
+    if (!quiet) displaySuccess(`Manifest saved to: ${manifestPath}`)
+  }
+
   // Exit with appropriate code
   if (results.missing.length > 0) {
     if (!quiet) displayWarning('Some photos not found (exit code 1)')
@@ -706,6 +726,7 @@ OPTIONS:
   --report [path]         Save summary report (auto-generates filename, or specify custom path)
   --format <type>         Report format: json, text, html (default: html)
   --log [path]            Save detailed log file (auto-generates filename, or specify custom path)
+  --manifest [path]       Save Organizer manifest JSON (auto-generates filename, or specify custom path)
   --case-sensitive        Use case-sensitive filename matching
   --max-depth <n>         Maximum search depth (default: unlimited)
   --quiet                 Minimal output
@@ -726,6 +747,9 @@ EXAMPLES:
 
   # Custom report and log paths
   photo-finder --export data.json --search /photos --report ./my-report.html --log ./my-log.txt
+
+  # Save manifest for Organizer input reuse
+  photo-finder --export data.json --search /photos --manifest
 
   # Case-sensitive search with depth limit
   photo-finder --export data.json --search /photos --case-sensitive --max-depth 3
@@ -775,6 +799,14 @@ function parseArgs () {
         parsed.log = args[++i] // Path provided
       } else {
         parsed.log = true // Boolean flag
+      }
+    } else if (arg === '--manifest') {
+      // Check if next arg is a value or another flag
+      const nextArg = args[i + 1]
+      if (nextArg && !nextArg.startsWith('--')) {
+        parsed.manifest = args[++i] // Path provided
+      } else {
+        parsed.manifest = true // Boolean flag
       }
     } else if (arg === '--case-sensitive') {
       parsed.caseSensitive = true
