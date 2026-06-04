@@ -1,6 +1,6 @@
 # Phase 7D: Organizer CLI Tool
 
-**Status:** ⏳ PLANNED  
+**Status:** ✅ IMPLEMENTED (core completed, testing pending)  
 **Parent Phase:** Phase 7 - Node.js CLI Utilities  
 **Duration:** 1 day (estimated)  
 **Dependencies:** Phase 7A complete (CLI Foundation), Phase 7B complete (Photo Finder)  
@@ -30,12 +30,23 @@ Organizer creates organized directory structures containing SnapSpot exports and
 
 ## Deliverables
 
-- [ ] `cli/tools/organizer/organizer.js` - Main tool
-- [ ] `cli/tools/organizer/schemes.js` - Organization schemes
-- [ ] `cli/tools/organizer/README.md` - Tool documentation
-- [ ] `cli/tools/organizer/preview.js` - Dry-run structure preview helpers
+- [x] `cli/tools/organizer/organizer.js` - Main tool
+- [x] `cli/tools/organizer/schemes.js` - Organization schemes
+- [x] `cli/tools/organizer/README.md` - Tool documentation
+- [x] `cli/tools/organizer/preview.js` - Dry-run structure preview helpers
 - [ ] Unit tests for all organization schemes
 - [ ] Example workflows and usage documentation
+
+### Additional Deliverables (beyond original plan)
+
+- [x] `tools/organizer-ui/index.html` - Browser command generator UI
+- [x] `tools/organizer-ui/ui-controller.js` - UI interactions and command generation
+- [x] `tools/organizer-ui/styles.css` - Organizer UI styles
+- [x] `--manifest` flag on Photo Finder CLI (save organizer manifest JSON)
+- [x] `--manifest` flag on Organizer CLI (reuse Photo Finder manifest)
+- [x] Manifest checkbox in Photo Finder browser UI (enabled by default)
+- [x] Manifest input mode in Organizer browser UI
+- [x] Launcher tile in `index.html`
 
 ---
 
@@ -45,88 +56,95 @@ Organizer creates organized directory structures containing SnapSpot exports and
 
 **Core Functionality (`organizer.js`):**
 
-- [ ] Import shared libraries:
-  - [ ] **`lib/snapspot-data/parser.js`** - Reuse from browser utilities
-  - [ ] **`lib/snapspot-data/validator.js`** - Reuse from browser utilities
-  - [ ] `cli/shared/export-loader.js` - Wrapper around lib/snapspot-data
-  - [ ] `cli/shared/prompt-helpers.js`
-  - [ ] `cli/shared/progress-bar.js`
-  - [ ] `cli/shared/report-generator.js`
-  - [ ] `fs-extra` for directory operations
-  - [ ] **`cli/tools/photo-finder/photo-finder.js`** - For programmatic photo search
+- [x] Import shared libraries:
+  - [x] **`lib/snapspot-data/parser.js`** - Reuse from browser utilities
+  - [x] **`lib/snapspot-data/validator.js`** - Reuse from browser utilities
+  - [x] `cli/shared/export-loader.js` - Wrapper around lib/snapspot-data
+  - [x] `cli/shared/prompt-helpers.js`
+  - [x] `cli/shared/progress-bar.js`
+  - [x] `cli/shared/report-generator.js`
+  - [x] `fs-extra` for directory operations
+  - [x] **`cli/tools/photo-finder/photo-finder.js`** - For programmatic photo search
 
-- [ ] Implement `invokePhotoFinder(exportPath, searchPaths)`
-  - [ ] **Import Photo Finder as Node.js module (not spawn process)**
-  - [ ] Call `findPhotosForExport(exportPath, searchPaths, { quiet: true })`
-  - [ ] Call `generateInternalManifest(results)` with returned search results
-  - [ ] Receive internal manifest (not saved to disk)
-  - [ ] Receive search summary (found/missing/duplicates/duration)
-  - [ ] Return manifest with found photos and metadata
-  - [ ] Handle Photo Finder errors gracefully
+- [x] Implement `invokePhotoFinder(exportPath, searchPaths)`
+  - [x] **Import Photo Finder as Node.js module (not spawn process)**
+  - [x] Call `findPhotosForExport(exportPath, searchPaths, { quiet: true })`
+  - [x] Call `generateInternalManifest(results)` with returned search results
+  - [x] Receive internal manifest (not saved to disk)
+  - [x] Receive search summary (found/missing/duplicates/duration)
+  - [x] Return manifest with found photos and metadata
+  - [x] Handle Photo Finder errors gracefully
 
-- [ ] Enforce **no duplicate Photo Finder UX** in Organizer:
-  - [ ] Do not re-implement Photo Finder report/log generation in Organizer
-  - [ ] Do not re-implement Photo Finder diagnostic screens/details tables
-  - [ ] Show compact search summary only (found/missing/duplicates)
-  - [ ] If detailed diagnostics are needed, direct user to run `photo-finder --report --log`
-  - [ ] Reuse `cli/shared/prompt-helpers.js` for all Organizer prompts
+- [x] Implement `loadManifestFile(manifestPath, exportPath)` (added beyond plan)
+  - [x] Read and validate Photo Finder manifest JSON
+  - [x] Align export path for copy-export operations
+  - [x] Return manifest + summary matching `invokePhotoFinder` contract
 
-- [ ] Implement organization schemes (`schemes.js`):
-  - [ ] `organizeByMap(exportData, foundPhotos, outputDir)`
-    - [ ] Structure: `{outputDir}/{mapName}/export.json` + photos
-  - [ ] `organizeByMarker(exportData, foundPhotos, outputDir)`
-    - [ ] Structure: `{outputDir}/{mapName}/{markerNumber}-{description}/` + photos
-  - [ ] `organizeByDate(exportData, foundPhotos, outputDir)`
-    - [ ] Structure: `{outputDir}/YYYY-MM-DD/` (by creation date)
-  - [ ] `organizeCategorized(exportData, foundPhotos, outputDir)`
-    - [ ] Structure: `{outputDir}/exports/`, `{outputDir}/photos/by-map/`, etc.
-  - [ ] `organizeFlat(exportData, foundPhotos, outputDir)`
-    - [ ] All in one directory with prefixes
+- [x] Enforce **no duplicate Photo Finder UX** in Organizer:
+  - [x] Do not re-implement Photo Finder report/log generation in Organizer
+  - [x] Do not re-implement Photo Finder diagnostic screens/details tables
+  - [x] Show compact search summary only (found/missing/duplicates)
+  - [x] If detailed diagnostics are needed, direct user to run `photo-finder --report --log`
+  - [x] Reuse `cli/shared/prompt-helpers.js` for all Organizer prompts
 
-- [ ] Implement core operations:
-  - [ ] Create directory structure for chosen scheme
-  - [ ] Copy export file to appropriate location(s)
-  - [ ] Copy found photos to appropriate location(s)
-  - [ ] Handle filename collisions (append number or ask user)
-  - [ ] Create README.txt in output directory explaining structure
-  - [ ] Optionally create index.html for browsing
+- [x] Implement organization schemes (`schemes.js`):
+  - [x] `organizeByMap(exportData, foundPhotos, outputDir)`
+    - [x] Structure: `{outputDir}/{mapName}/export.json` + photos
+  - [x] `organizeByMarker(exportData, foundPhotos, outputDir)`
+    - [x] Structure: `{outputDir}/{mapName}/{markerNumber}-{description}/` + photos
+  - [x] `organizeByDate(exportData, foundPhotos, outputDir)`
+    - [x] Structure: `{outputDir}/YYYY-MM-DD/` (by creation date)
+  - [x] `organizeCategorized(exportData, foundPhotos, outputDir)`
+    - [x] Structure: `{outputDir}/exports/`, `{outputDir}/photos/by-map/`, etc.
+  - [x] `organizeFlat(exportData, foundPhotos, outputDir)`
+    - [x] All in one directory with prefixes
 
-- [ ] Implement interactive mode:
-  - [ ] Prompt for export file path
-  - [ ] Prompt for photo search directory(ies)
-  - [ ] **Invoke Photo Finder to search for photos (internal manifest)**
-  - [ ] Display found/missing summary from Photo Finder
-  - [ ] Prompt for organization scheme (with descriptions)
-  - [ ] Prompt for output directory
-  - [ ] Preview directory structure
-  - [ ] Confirm before creating
-  - [ ] Copy files with progress bar
-  - [ ] Generate completion report
+- [x] Implement core operations:
+  - [x] Create directory structure for chosen scheme
+  - [x] Copy export file to appropriate location(s)
+  - [x] Copy found photos to appropriate location(s)
+  - [x] Handle filename collisions (append number, deterministic)
+  - [x] Create README.txt in output directory explaining structure
+  - [x] Optionally create index.html for browsing
 
-- [ ] Implement CLI mode with flags:
-  - [ ] `--export <path>` - Export file path
-  - [ ] `--search <paths>` - Photo search directories (comma-separated, same contract as Photo Finder CLI)
-  - [ ] `--output <path>` - Output directory
-  - [ ] `--scheme <by-map|by-marker|by-date|categorized|flat>` - Organization scheme
-  - [ ] `--create-index` - Generate browsable HTML index
-  - [ ] `--copy-export` - Include export file in archive
-  - [ ] `--missing-ok` - Proceed even if Photo Finder reports missing photos
-  - [ ] `--dry-run` - Show structure without creating
-  - [ ] `--report <path>` - Save report
+- [x] Implement interactive mode:
+  - [x] Prompt for export file path
+  - [x] Prompt for photo source: search directories OR existing manifest (added beyond plan)
+  - [x] Prompt for photo search directory(ies)
+  - [x] **Invoke Photo Finder to search for photos (internal manifest)**
+  - [x] Display found/missing summary from Photo Finder
+  - [x] Prompt for organization scheme (with descriptions)
+  - [x] Prompt for output directory
+  - [x] Preview directory structure
+  - [x] Confirm before creating
+  - [x] Copy files with progress bar
+  - [x] Generate completion report
+
+- [x] Implement CLI mode with flags:
+  - [x] `--export <path>` - Export file path
+  - [x] `--search <paths>` - Photo search directories (comma-separated, same contract as Photo Finder CLI)
+  - [x] `--manifest <path>` - Photo Finder manifest JSON (alternative to --search, added beyond plan)
+  - [x] `--output <path>` - Output directory
+  - [x] `--scheme <by-map|by-marker|by-date|categorized|flat>` - Organization scheme
+  - [x] `--create-index` - Generate browsable HTML index
+  - [x] `--copy-export` - Include export file in archive
+  - [x] `--missing-ok` - Proceed even if Photo Finder reports missing photos
+  - [x] `--dry-run` - Show structure without creating
+  - [x] `--report <path>` - Save report
 
 **Documentation (`README.md`):**
 
-- [ ] Tool overview and use cases (archival, sharing, backup)
-- [ ] All organization schemes explained with diagrams
-- [ ] Interactive mode walkthrough
-- [ ] CLI mode examples
-- [ ] **How Organizer invokes Photo Finder internally**
-- [ ] Use case examples:
-  - [ ] Creating shareable archive with photos
-  - [ ] Organizing project files for archival
-  - [ ] Creating backup with original photos
-  - [ ] **Validating export before organizing (run Photo Finder first)**
-- [ ] Troubleshooting section
+- [x] Tool overview and use cases (archival, sharing, backup)
+- [x] All organization schemes explained
+- [x] Interactive mode walkthrough
+- [x] CLI mode examples (including --manifest workflow)
+- [x] **How Organizer invokes Photo Finder internally**
+- [x] Use case examples:
+  - [x] Creating shareable archive with photos
+  - [x] Organizing project files for archival
+  - [x] Creating backup with original photos
+  - [x] **Validating export before organizing (run Photo Finder first)**
+- [x] Troubleshooting section
 
 ---
 
@@ -162,23 +180,34 @@ organizer --export data.json --search /photos --output /archive \
 # Open /archive/index.html in browser
 ```
 
+**Workflow 5: Reuse Photo Finder Manifest (no repeated search)**
+```bash
+# Step 1: Photo Finder saves manifest (with default --manifest flag)
+photo-finder --export data.json --search /photos --manifest
+
+# Step 2: Organizer reuses manifest, skipping redundant search
+organizer --export data.json --manifest ./output/MyMap_photo_manifest.json \
+  --output /archive --scheme by-marker
+```
+
 ---
 
 ## Acceptance Criteria
 
-- [ ] All organization schemes create correct structures
-- [ ] Directory names are filesystem-safe
-- [ ] Handles filename collisions gracefully
-- [ ] Creates comprehensive README in archive
-- [ ] Optional HTML index is browsable
-- [ ] Dry-run shows accurate preview
-- [ ] Works with partial photo matches (missing photos handled)
-- [ ] Reports show complete archive structure
-- [ ] Works in both interactive and CLI modes
-- [ ] **Invokes Photo Finder internally for photo search (no duplicate code)**
-- [ ] **Passes search directories to Photo Finder correctly**
-- [ ] **Handles Photo Finder errors gracefully**
-- [ ] **Does not duplicate Photo Finder report/log UX (Organizer only shows compact summary)**
+- [x] All organization schemes create correct structures
+- [x] Directory names are filesystem-safe
+- [x] Handles filename collisions gracefully (deterministic suffix)
+- [x] Creates comprehensive README in archive
+- [x] Optional HTML index is browsable
+- [x] Dry-run shows accurate preview
+- [x] Works with partial photo matches (missing photos handled)
+- [x] Reports show complete archive structure
+- [x] Works in both interactive and CLI modes
+- [x] **Invokes Photo Finder internally for photo search (no duplicate code)**
+- [x] **Supports manifest JSON as alternative to search directories (no repeated search)**
+- [x] **Passes search directories to Photo Finder correctly**
+- [x] **Handles Photo Finder errors gracefully**
+- [x] **Does not duplicate Photo Finder report/log UX (Organizer only shows compact summary)**
 
 ---
 
@@ -395,5 +424,31 @@ To view this archive:
 
 After completing Phase 7D:
 - Proceed to [Phase 7E: Testing & Polish](PHASE_7E_TESTING_POLISH.md)
+- Remaining work: unit tests for all organization schemes
 - All three CLI tools complete
 - Ready for comprehensive testing
+
+---
+
+## Post-Completion Changes
+
+### 2026-06-03 — Manifest Workflow & Browser UI
+
+**Description:** Added Photo Finder manifest support and browser UI for Organizer to enable a "search once, organize repeatedly" workflow. Users can run Photo Finder once with `--manifest`, then feed the resulting JSON to Organizer via `--manifest` instead of repeating search paths.
+
+**Files Modified:**
+- `cli/tools/photo-finder/photo-finder.js` — Added `--manifest` flag, saves `generateInternalManifest()` output as JSON
+- `cli/tools/organizer/organizer.js` — Added `--manifest` flag, `loadManifestFile()` function, input mode choice in interactive mode
+- `cli/tools/organizer/README.md` — Documented manifest workflow
+
+**Files Created:**
+- `tools/organizer-ui/index.html` — Browser command generator UI
+- `tools/organizer-ui/ui-controller.js` — UI controller with config prefill, manifest/search mode toggle
+- `tools/organizer-ui/styles.css` — Organizer UI styles
+
+**Files Modified (UI integration):**
+- `tools/photo-finder-ui/index.html` — Added "Save organizer manifest" checkbox (default: checked)
+- `tools/photo-finder-ui/ui-controller.js` — Wired manifest checkbox into command generation
+- `index.html` — Added Organizer tile to launcher
+
+**Testing Status:** CLI help verified, lint clean, browser pages open locally. Unit tests pending.

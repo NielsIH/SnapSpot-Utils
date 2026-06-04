@@ -1,1074 +1,760 @@
-# Phase 7C: Export Transformer Tool (CLI + Browser UI)
+# Phase 7C: Export Transformer — Universal Selection & Action Tool
 
 **Status:** ⏳ PLANNED  
 **Parent Phase:** Phase 7 - Node.js CLI Utilities  
-**Duration:** 2 days (estimated)  
-**Dependencies:** Phase 7A complete (CLI Foundation established)  
-**Goal:** Build CLI tool and browser UI for batch modification of SnapSpot export files and photo extraction
+**Duration:** 7 days (estimated)  
+**Dependencies:** Phase 7A complete (CLI Foundation established), Phase 7B complete (Photo Finder for filter integration)  
+**Goal:** Build a universal, extensible tool for selecting markers/photos in SnapSpot exports and applying actions to the selection — both as a rich browser UI and a scriptable CLI
 
 ---
 
-## Overview
+## Design Philosophy
 
-Export Transformer provides both a **Node.js CLI tool** and a **browser-based UI** for batch modification of SnapSpot export files with operations like:
-- **Removing embedded photo data** (strips `imageData` property only, keeps photo objects for local serving)
-- **Extracting embedded Base64 photos to JPEG files** (with optional filename filtering)
-- **Splitting markers** with multiple photos into individual markers (one photo per marker)
-- Batch processing multiple exports with same transformations
-- *(Future)* Renaming/removing maps and markers in bulk
-- *(Future)* Setting custom metadata (CLI only, not used by SnapSpot PWA)
-- *(Future)* Format transformation to other applications using mapping files
+Instead of pre-defined "transform everything" operations, Export Transformer follows a **selection → action** model:
 
-**Architecture:**
-- **CLI Tool** (`cli/tools/export-transformer/`) - Standalone Node.js tool for automation
-- **Browser UI** (`tools/export-transformer-ui/`) - Interactive command builder and configuration manager
+1. **Load** an export and visualize it (map + tree)
+2. **Select** markers/photos using filters, map clicks, or manual checkboxes
+3. **Act** on the selection (delete, remove photo data, extract photos, rename)
 
-**Browser UI Features:**
-- Interactive transformation configuration
-- Pre-populated paths from localStorage configuration
-- Command builder (generates full CLI command)
-- Integration with photo-finder output (filter photos to extract)
-- Preview and execute transformations in-browser
-- Export configured command for terminal use
+This mirrors how users actually work: *"Show me the markers Bob placed that I don't have photos for, and let me remove them."*
 
-**CLI Features:**
-- Dry-run mode for preview
-- Automatic backups
-- Batch processing with glob patterns
-- Chain multiple transformations
-- Extract photos while preserving reference data
-- Filter photos by filename list (integrates with photo-finder output)
+The architecture is **plugin-based** — adding a new filter or action is ~15–20 lines of code without touching the UI.
 
 ---
 
-## Implementation Priorities
+## What's NOT in scope
 
-**Phase 7C Focus (Core Functionality):**
-1. ✅ **Photo Extraction** - Extract embedded Base64 photos to JPEG files
-   - Multiple organization schemes
-   - Optional filename filtering (photo-finder integration)
-   - Hash verification
-2. ✅ **Photo Data Removal** - Strip `imageData` property only (keep photo objects for metadata)
-   - Enables local high-quality photo serving in SnapSpot PWA
-   - Reduces export file size while preserving photo references
-3. ✅ **Marker Splitting** - Split markers with multiple photos into individual markers
-   - Better field documentation workflow
-   - Creates stacked markers (same coordinates)
-   - Meaningful descriptions for each photo
-4. ✅ **Browser UI** - Command builder and configuration manager
-5. ✅ **Batch Processing** - Process multiple exports with same transformations
+| Dropped from original design | Reason |
+|---|---|
+| Marker splitting | Creates stacked markers that SnapSpot PWA can't yet navigate. Revisit when PWA has stacked marker UI. |
+| Separate CLI "command builder" UI | The browser UI **is** the tool. CLI exists for scripting/automation, not as a secondary interface. |
+| Placeholder transforms (renameMap, removeMap, setCustomMetadata) | These become natural actions in the new model — no need for placeholders. |
+| Format transformation to other apps | Future phase (7F+). Architecture supports it via plugin system. |
 
-**Placeholder Implementations (CLI only, not in UI):**
-- `renameMap()` - Basic single map rename
-- `removeMap()` - Remove map and markers
-- `setCustomMetadata()` - Add custom properties (not used by SnapSpot PWA)
-- **Rationale:** Individual operations can be done in SnapSpot app. Future phases will determine useful patterns for bulk operations.
+---
 
-**Future Phases:**
-- **Bulk renaming/removal patterns** - Determine useful batch operations (regex, templates, etc.)
-- **Format transformation** - Transform SnapSpot JSON to other formats using mapping files
-- **Advanced metadata** - Support for custom fields in other applications
-- **SnapSpot PWA - Stacked markers UI** - Implement circular spread or modal list for accessing stacked markers
+## UI Design: Three-Panel Layout
+
+```
++==============================================================+
+|  Export Transformer                            [Config] [?]  |
++==============================================================+
+|  TOOLBAR: [Filters v] [Actions v]   12 markers . 5 selected  |
++------------+---------------------+----------------------------+
+|  TREE      |                     |  DETAILS                   |
+|            |                     |                            |
+| [?] Export |    MAP VIEW         |  * "Front Entrance"        |
+|  [?] Map   |    (pan/zoom)       |  ---------------------     |
+|   [?] * A  |                     |  ID: a1b2c3d4-...          |
+|   [x] * B  |    . = normal       |  Position: (345, 256)      |
+|   [?] * C! |    (o) = selected   |  Created: 2026-05-12       |
+|    [?] img |    o = filtered     |  Photos: 3                 |
+|    [?] imgX|    (o!) = missing ! |                            |
+|   [?] * D  |                     |  Photo status:             |
+|   [x] * E  |    Click = select   |  V IMG_2401.jpg - 2.4 MB   |
+|            |    Shift+click =    |  V IMG_2402.jpg - 1.8 MB   |
+| Collapse   |      multi-select   |  X IMG_2403.jpg - missing  |
+| all markers|    Hover = tooltip   |                            |
+| by default |                     |                            |
++------------+---------------------+----------------------------+
+```
+
+### Panel 1: Tree (left column)
+
+A collapsible hierarchical view of the export structure. **Markers are collapsed by default** — users expand them only when they need photo-level selection.
+
+**What's shown at each level:**
+
+| Level | Visible info | Always shown |
+|---|---|---|
+| **Export root** | Export name + date | Yes |
+| **Map** | Map name, marker count, photo count | Yes |
+| **Marker** | Description, photo count, date, status badge | Yes |
+| **Photo** | Filename, file size, found/missing status | Only when marker expanded |
+
+**Status badges on markers:**
+- `!` — Has missing photos (from photo-finder integration)
+- `clip` — Has photos but `imageData` was stripped (metadata-only)
+- *(no badge)* — All photos present and embedded
+
+**Status badges on photos:**
+- `V` — Photo found on disk (photo-finder confirmed)
+- `X` — Photo missing (not found by photo-finder)
+- *(no badge)* — Status unknown (no photo-finder data loaded)
+
+**Checkbox behavior:**
+- Check a marker → selects the marker (not individual photos)
+- Check the map → selects all markers
+- Check the export → selects everything
+- Photo-level checkboxes appear only when a marker is expanded, for granular photo actions
+
+### Panel 2: Map (center)
+
+Reuses `CanvasRenderer` from `tools/map-migrator/` (already handles pan/zoom, image rendering, marker drawing). Enhanced with:
+
+- **Marker click** → select that marker in the tree
+- **Shift+click** → add/remove from multi-selection
+- **Hover** → tooltip with description + photo count + missing status
+- **Visual states:**
+  - Default: semi-transparent dot (primary color)
+  - Filter match: brighter, slightly larger
+  - Selected: blue filled circle with white border
+  - Missing photos: red ring around the dot
+  - Selected + missing: blue fill + red ring
+
+### Panel 3: Details (right column)
+
+Shows **technical properties** for the currently focused item. This is where IDs, coordinates, hashes, and other raw data live — keeping the tree clean.
+
+| When selecting... | Details panel shows |
+|---|---|
+| **A marker** | ID, X/Y coordinates, createdDate (ISO), photo count, total photo size, photo status list |
+| **A photo** | ID, filename, file size, imageHash, markerId, createdDate, file path on disk (if found) |
+| **Nothing** | Export summary: version, sourceApp, timestamp, total markers, total photos, total size |
+
+---
+
+## Toolbar
+
+### Filter Bar (collapsible)
+
+```
++==============================================================+
+| FILTERS  [Date Range v] [Text Search v] [Photo Status v] [+] |
++==============================================================+
+| Date:  [2026-05-01]  to  [2026-05-31]    [Apply] [Clear]     |
+| Text:  [Front              ] in [description v]               |
+| Photo: [x] Missing  [ ] No photos  [ ] Has embedded data      |
+| Source: [Run Photo-Finder...]  [Load Manifest...]  manifest.json |
+|                                                              |
+| > 12 of 45 markers match  [Select Matching] [+ Add to Sel.]  |
++==============================================================+
+```
+
+Active filters show a badge count. The `[+]` button is reserved for future custom filter plugins.
+
+### Action Bar
+
+```
++==============================================================+
+| ACTIONS  [Delete Selected] [Remove Photo Data] [Extract...] [v]|
+|          5 markers selected  .  12 photos affected            |
+|          [x] Create backup before modifying                    |
++==============================================================+
+```
+
+Actions are disabled when no selection exists. Destructive actions (Delete) show a confirmation dialog with a summary of what will be removed.
+
+---
+
+## Plugin Architecture
+
+Both filters and actions are defined as simple objects in a registry. Adding a new one requires no changes to the tree, map, or details panel.
+
+### Filter Plugin Interface
+
+```javascript
+// Registry entry — add to filters.js
+{
+  id: 'dateRange',
+  label: 'Date Range',
+  icon: 'calendar',
+  config: {
+    from: { type: 'date', label: 'From', default: null },
+    to:   { type: 'date', label: 'To',   default: null }
+  },
+  // Returns array of matching marker IDs
+  apply(exportData, config) {
+    return exportData.markers
+      .filter(m => {
+        const d = new Date(m.createdDate)
+        if (config.from && d < new Date(config.from)) return false
+        if (config.to   && d > new Date(config.to))   return false
+        return true
+      })
+      .map(m => m.id)
+  }
+}
+```
+
+### Action Plugin Interface
+
+```javascript
+// Registry entry — add to actions.js
+{
+  id: 'deleteMarkers',
+  label: 'Delete Selected Markers',
+  icon: 'trash',
+  requiresSelection: true,
+  destructive: true,    // Shows confirmation dialog
+  confirmMessage: (count) => `Delete ${count} markers and their photos?`,
+  async execute(exportData, selection, options) {
+    const ids = selection.selectedMarkerIds
+    exportData.markers = exportData.markers.filter(m => !ids.has(m.id))
+    exportData.photos  = exportData.photos.filter(p => !ids.has(p.markerId))
+    return exportData
+  }
+}
+```
+
+### Built-in Filters (Phase 7C)
+
+| Filter | Description |
+|---|---|
+| `dateRange` | Markers created within a date range |
+| `textSearch` | Markers whose description/name contains a search string |
+| `missingPhotos` | Markers with photos not found by photo-finder (uses internal manifest or loaded manifest file) |
+| `noPhotos` | Markers with zero photos |
+| `hasEmbeddedData` | Markers whose photos still have `imageData` (not yet stripped) |
+| `noEmbeddedData` | Markers whose photos have had `imageData` removed (metadata-only) |
+
+### Built-in Actions (Phase 7C)
+
+| Action | Scope | Description |
+|---|---|---|
+| `deleteMarkers` | Selected markers | Remove markers and their photos from the export |
+| `removePhotoData` | Selected markers' photos | Strip `imageData` property, keep metadata |
+| `extractPhotos` | Selected markers' photos | Extract Base64 photos to JPEG files on disk |
+| `renameMarkers` | Selected markers | Apply a rename template (e.g., prefix, suffix, find-replace) |
 
 ---
 
 ## Deliverables
 
-**CLI Tool:**
-- [ ] `cli/tools/export-transformer/export-transformer.js` - Main CLI tool
-- [ ] `cli/tools/export-transformer/transformations.js` - Transformation operations
-- [ ] `cli/tools/export-transformer/README.md` - CLI tool documentation
-- [ ] Unit tests for all transformations
+### Browser UI (`tools/export-transformer/`)
 
-**Browser UI:**
-- [ ] `tools/export-transformer-ui/index.html` - Browser UI entry point
-- [ ] `tools/export-transformer-ui/ui-controller.js` - UI interactions and command builder
-- [ ] `tools/export-transformer-ui/styles.css` - UI-specific styles
-- [ ] Integration with `shared/utils/config-manager.js` for configuration
-- [ ] Manual testing procedures for browser UI
+- [ ] `tools/export-transformer/index.html` — Three-panel layout with map canvas, tree container, details panel
+- [ ] `tools/export-transformer/ui-controller.js` — Main controller: file loading, selection state, panel coordination
+- [ ] `tools/export-transformer/tree-view.js` — Recursive tree component (export -> map -> markers -> photos)
+- [ ] `tools/export-transformer/map-view.js` — Map rendering with marker selection (wraps CanvasRenderer)
+- [ ] `tools/export-transformer/details-panel.js` — Dynamic property display for selected items
+- [ ] `tools/export-transformer/filters.js` — Filter plugin registry + UI generation
+- [ ] `tools/export-transformer/actions.js` — Action plugin registry + execution engine
+- [ ] `tools/export-transformer/selection.js` — Central selection state (pub/sub, set-based)
+- [ ] `tools/export-transformer/photo-finder-integration.js` — Invoke photo-finder programmatically and parse internal manifest format
+- [ ] `tools/export-transformer/styles.css` — Layout, tree styling, map container, details panel
+
+### CLI Tool (`cli/tools/export-transformer/`)
+
+- [ ] `cli/tools/export-transformer/export-transformer.js` — CLI entry point with filter/action flags
+- [ ] `cli/tools/export-transformer/README.md` — CLI usage and examples
+
+### Shared Module
+
+- [ ] `core/export-transformer/selection-engine.js` — Framework-agnostic selection + filter + action engine (used by both browser UI and CLI)
 
 ---
 
 ## Tasks
 
-### 7.3.1 Browser UI (`tools/export-transformer-ui/`)
+### 7C.1 Core Selection Engine (`core/export-transformer/`)
 
-**User Interface (`index.html + ui-controller.js`):**
+This is the framework-agnostic engine shared by both browser UI and CLI. No DOM, no Node.js specifics.
 
-- [ ] Import shared utilities:
-  - [ ] `shared/utils/config-manager.js` - Load/save configuration
-  - [ ] `shared/utils/file-loader.js` - For export file selection
-  - [ ] `lib/snapspot-data/parser.js` - Parse loaded exports
-  - [ ] `lib/snapspot-data/validator.js` - Validate exports
+- [ ] **`selection-engine.js` — SelectionState class:**
+  - [ ] `selectedMarkerIds` — `Set<string>`, single source of truth
+  - [ ] `selectedPhotoIds` — `Set<string>`, for granular photo actions
+  - [ ] `subscribe(callback)` — Pub/sub for UI updates
+  - [ ] `select(markerId)` / `deselect(markerId)` / `toggle(markerId)`
+  - [ ] `selectAll(exportData)` / `clearAll()`
+  - [ ] `selectByFilter(filter, config, exportData)` — Replace selection with filter results
+  - [ ] `addByFilter(filter, config, exportData)` — Add filter results to existing selection
+  - [ ] `removeByFilter(filter, config, exportData)` — Remove filter results from selection
+  - [ ] `getSelectedMarkers(exportData)` — Returns full marker objects for selected IDs
+  - [ ] `getSelectedPhotos(exportData)` — Returns full photo objects for selected IDs
+  - [ ] `getSelectionStats(exportData)` — Counts, sizes, status summary
 
-- [ ] Implement UI sections:
-  - [ ] **Export File Selection:**
-    - [ ] File input for single export
-    - [ ] Pattern input for multiple exports (with preview)
-    - [ ] Pre-populate from configuration (`paths.exportsDir`)
-    - [ ] Display loaded export summary (maps, markers, photos count)
-  
-  - [ ] **Transformation Configuration:**
-    - [ ] Checkbox list of available transformations:
-      - [ ] Remove Photo Data (imageData only)
-      - [ ] Extract Photos to Files
-      - [ ] Split Markers with Multiple Photos
-    - [ ] Configuration panel for each transformation:
-      - [ ] **Remove Photo Data:** Simple checkbox (no additional options)
-      - [ ] **Extract Photos:** 
-        - [ ] Directory input (pre-populate from config)
-        - [ ] Organization scheme selector
-        - [ ] Marker naming preference
-        - [ ] Filename filter (optional)
-      - [ ] **Split Markers:**
-        - [ ] Description template input (e.g., "{original} - Photo {number}")
-        - [ ] Preview: Show markers that will be split (count)
-  
-  - [ ] **Photo Extraction Configuration:**
-    - [ ] Output directory input (pre-populate from `paths.photosDir`)
-    - [ ] Organization scheme selector:
-      - [ ] By map (`by-map`)
-      - [ ] By marker with description as folder name (`by-marker-description`)
-      - [ ] By marker with chronological number as folder name (`by-marker-number`)
-      - [ ] Flat directory (`flat`)
-    - [ ] Marker folder naming options:
-      - [ ] Use marker description (sanitized for filenames)
-      - [ ] Use sequential number (calculated from createdDate sort)
-    - [ ] Optional filename filter:
-      - [ ] Text area for filename list (one per line)
-      - [ ] Import from photo-finder report
-      - [ ] Auto-populated from photo-finder UI if available
-      - [ ] Example: Extract only photos matching specific names
-    - [ ] Extract-and-remove checkbox (remove from export after extraction)
-  
-  - [ ] **Options:**
-    - [ ] Backup checkbox (create .bak before modifying)
-    - [ ] Dry-run checkbox (preview only)
-    - [ ] Output directory for modified exports (optional)
-  
-  - [ ] **Command Builder:**
-    - [ ] Generate full CLI command with all configured parameters
-    - [ ] Copy-to-clipboard button
-    - [ ] Display command in code block with syntax highlighting
-    - [ ] Syntax: `node cli/tools/export-transformer/export-transformer.js [options]`
-  
-  - [ ] **Preview Panel:**
-    - [ ] Show what will be modified (maps, markers, photos affected)
-    - [ ] For photo extraction: List photos that will be extracted
-    - [ ] For batch: Show affected files count
+- [ ] **`selection-engine.js` — Filter registry:**
+  - [ ] `registerFilter(filterPlugin)` — Add a filter to the registry
+  - [ ] `getFilter(id)` — Retrieve a filter by ID
+  - [ ] `listFilters()` — All registered filters with metadata
+  - [ ] `applyFilter(id, config, exportData)` — Run a filter, return matching marker IDs
+  - [ ] Filter plugins are plain objects: `{ id, label, icon, config, apply() }`
 
-- [ ] Implement configuration integration:
-  - [ ] Load configuration on page load
-  - [ ] Pre-populate paths from configuration
+- [ ] **`selection-engine.js` — Action registry:**
+  - [ ] `registerAction(actionPlugin)` — Add an action to the registry
+  - [ ] `getAction(id)` — Retrieve an action by ID
+  - [ ] `listActions()` — All registered actions with metadata
+  - [ ] `executeAction(id, exportData, selection, options)` — Run an action, return modified export + report
+  - [ ] Action plugins are plain objects: `{ id, label, icon, requiresSelection, destructive, execute() }`
+
+- [ ] **Built-in filter implementations:**
+  - [ ] `dateRange` — Filter markers by `createdDate` range
+  - [ ] `textSearch` — Filter markers by substring in `description`
+  - [ ] `missingPhotos` — Filter markers where photo-finder found missing photos
+  - [ ] `noPhotos` — Filter markers with zero photos
+  - [ ] `hasEmbeddedData` — Filter markers whose photos still have `imageData`
+  - [ ] `noEmbeddedData` — Filter markers whose photos had `imageData` removed
+
+- [ ] **Built-in action implementations:**
+  - [ ] `deleteMarkers` — Remove selected markers and their photos from export
+  - [ ] `removePhotoData` — Strip `imageData` from selected markers' photos (keep photo objects)
+  - [ ] `extractPhotos` — Extract selected markers' photos to JPEG files on disk
+  - [ ] `renameMarkers` — Apply find-replace or template to selected markers' descriptions
+
+- [ ] **`missingPhotos` filter — photo-finder integration:**
+  - [ ] Two data sources for the filter:
+    - [ ] **Background invocation:** Call `findPhotosForExport()` from Photo Finder CLI programmatically, use the returned internal manifest (same API Organizer uses)
+    - [ ] **Load existing manifest:** Accept a previously-saved Photo Finder manifest JSON file
+  - [ ] Internal manifest format (from Photo Finder's `generateInternalManifest()`):
+    - [ ] Per-photo record: `{ filename, markerId, markerNumber, mapName, foundPath, status }`
+    - [ ] Status values: `'found'`, `'missing'`, `'duplicate'`
+  - [ ] Build lookup: `filename -> { found, path, markerId }` for the filter to determine which markers have missing photos
+  - [ ] When no manifest is loaded and no background invocation is run, the `missingPhotos` filter returns no results (unknown status)
+
+### 7C.2 Browser UI — Layout & Shell
+
+- [ ] **`index.html`:**
+  - [ ] Three-column CSS grid layout (tree | map | details)
+  - [ ] Collapsible filter bar at top
+  - [ ] Action toolbar below filter bar
+  - [ ] Desktop warning overlay (1280px minimum, per project convention)
+  - [ ] File drop zone for export loading (reuse pattern from map-migrator)
+  - [ ] File drop zone for photo-finder report loading
+  - [ ] Canvas element for map view
+  - [ ] Tree container div
+  - [ ] Details container div
+  - [ ] Modal for confirmation dialogs (delete, etc.)
   - [ ] Link to configuration page (`/tools/config/`)
-  - [ ] Show "Configure paths" notice if configuration is incomplete
 
-- [ ] Implement photo-finder integration:
-  - [ ] Import photo-finder report (CSV or JSON)
-  - [ ] Parse missing photo filenames
-  - [ ] Auto-populate filename filter for extraction
-  - [ ] Example workflow: Find missing photos → Extract those photos from export
+### 7C.3 Browser UI — Tree View
 
-**Styling (`styles.css`):**
+- [ ] **`tree-view.js` — TreeView class:**
+  - [ ] Render export -> map -> markers (collapsed) -> photos (hidden until expanded)
+  - [ ] Checkbox at each level with tri-state (none / some / all selected)
+  - [ ] Click marker in tree -> select it, scroll map to marker, update details
+  - [ ] Click photo in tree -> select it, update details
+  - [ ] Expand/collapse markers individually
+  - [ ] "Expand all" / "Collapse all" buttons
+  - [ ] Visual indicators: status badges, selected state, filter match highlight
+  - [ ] Show marker count, photo count at map and export level
+  - [ ] Virtual scrolling for large exports (500+ markers)
 
-- [ ] Follow utility.css patterns
-- [ ] Responsive layout for transformation panels
-- [ ] Clear visual hierarchy for multi-step workflow
-- [ ] Command output styling (monospace, code block)
+### 7C.4 Browser UI — Map View
 
-### 7.3.2 CLI Tool (`cli/tools/export-transformer/`)
+- [ ] **`map-view.js` — MapView class (wraps CanvasRenderer):**
+  - [ ] Load map image via `renderer.loadImage()`
+  - [ ] Enable pan/zoom via `renderer.enablePanZoom()`
+  - [ ] Draw markers as clickable dots with visual states:
+    - [ ] Normal: semi-transparent primary color, 7px radius
+    - [ ] Filter match: brighter, 9px radius
+    - [ ] Selected: blue fill (#2563eb) with white border, 9px radius
+    - [ ] Missing photos: red ring (#dc2626), 2px border
+    - [ ] Selected + missing: blue fill + red ring
+  - [ ] Click marker -> select (sync with tree + details)
+  - [ ] Shift+click marker -> toggle in multi-selection
+  - [ ] Hover marker -> tooltip: description, photo count, status
+  - [ ] `onRedraw` callback for maintaining overlays during pan/zoom
+  - [ ] Coordinate transformation (screen <-> world) via `renderer.screenToWorld()`
 
-**Core Functionality (`export-transformer.js`):**
+### 7C.5 Browser UI — Details Panel
 
-- [ ] Import shared libraries:
-  - [ ] **`lib/snapspot-data/parser.js`** - Reuse from browser utilities
-  - [ ] **`lib/snapspot-data/validator.js`** - Reuse from browser utilities
-  - [ ] **`lib/snapspot-data/writer.js`** - Reuse from browser utilities
-  - [ ] **`lib/snapspot-image/converter.js`** - For photo extraction
-  - [ ] `cli/shared/export-loader.js` - Wrapper around lib/snapspot-data
-  - [ ] `cli/shared/export-writer.js` - Wrapper around lib/snapspot-data
-  - [ ] `cli/shared/prompt-helpers.js`
-  - [ ] `cli/shared/report-generator.js`
+- [ ] **`details-panel.js` — DetailsPanel class:**
+  - [ ] When marker selected: show ID, x/y, createdDate, photo count, total photo size, photo status list
+  - [ ] When photo selected: show ID, filename, fileSize, imageHash, markerId, createdDate, disk path (if found)
+  - [ ] When nothing selected: show export summary (version, timestamp, counts, total size)
+  - [ ] Copy-to-clipboard buttons for IDs and paths
+  - [ ] Photo status list with found/missing indicators and file sizes
 
-- [ ] Implement core transformation operations (`transformations.js`):
-  - [ ] **`removePhotoData(exportData)`** - Strip `imageData` property for smaller files:
-    - [ ] Remove `imageData` from all photo objects in the export
-    - [ ] **Keep photo objects** with metadata (`id`, `filename`, `imageHash`, `markerId`, `createdDate`)
-    - [ ] Enables SnapSpot PWA to serve photos from local directory
-    - [ ] Export remains valid, just without embedded Base64 data
-    - [ ] **Note:** Each export contains exactly one map, so no map filtering needed
-  - [ ] **`extractPhotosToFiles(exportData, outputDir, options)`** - Extract embedded photos:
-    - [ ] Read photo data (base64) from export
-    - [ ] Calculate marker numbers (sort all markers by createdDate, assign sequential numbers)
-    - [ ] **Optional filename filter:** Extract only photos matching provided list
-    - [ ] Convert base64 to image blobs using `lib/snapspot-image/converter.js`
-    - [ ] Save as JPEG files with original filenames
-    - [ ] **Organize in subdirectories with configurable marker naming:**
-      - [ ] `by-map` - Group by map name
-      - [ ] `by-marker-description` - Group by map/marker description
-      - [ ] `by-marker-number` - Group by map/marker chronological number
-      - [ ] `flat` - All photos in one directory
-    - [ ] Generate mapping file (photo ID → filename → extracted path)
-    - [ ] Verify extraction with hash validation
-  - [ ] **`splitMarkersWithMultiplePhotos(exportData, options)`** - Split markers into individual markers:
-    - [ ] Find all markers with 2+ photos
-    - [ ] For each multi-photo marker:
-      - [ ] Keep first photo in original marker
-      - [ ] Create new markers for remaining photos (same position x/y)
-      - [ ] Generate new UUIDs for new markers
-      - [ ] Copy marker description or prompt for new descriptions
-      - [ ] Preserve all other marker properties
-      - [ ] Update createdDate to maintain chronological order
-    - [ ] Options: description template (e.g., "Original - Photo 1", "Original - Photo 2")
-    - [ ] Return report of splits performed
+### 7C.6 Browser UI — Filter Bar
 
-- [ ] Implement placeholder transformations (basic functionality, not in UI):
-  - [ ] `renameMap(exportData, oldName, newName)` - Rename single map
-  - [ ] `removeMap(exportData, mapName)` - Remove map and all markers
-  - [ ] `setCustomMetadata(exportData, metadata)` - Add custom properties (not used by SnapSpot PWA)
-  - [ ] **Note:** These are placeholders for potential future bulk operations
-  - [ ] Individual renaming/removal can be done in SnapSpot app - these would be for bulk/batch use cases
-  - [ ] Will determine useful patterns for bulk operations in future phases
+- [ ] Collapsible filter bar with active filter count badge
+- [ ] Each filter renders its own config UI based on the plugin's `config` schema
+- [ ] Date range: two date inputs
+- [ ] Text search: text input + field selector dropdown
+- [ ] Photo status: checkboxes for missing / no photos / has embedded data
+- [ ] Photo-finder integration in filter bar:
+    - [ ] "Run Photo-Finder" button — invokes Photo Finder CLI programmatically in the background
+    - [ ] Shows progress while running (photo count, found/missing)
+    - [ ] "Load Manifest" button — accepts a previously-saved Photo Finder manifest JSON file via drag-drop or file picker
+    - [ ] Shows loaded manifest filename and summary (e.g., "manifest.json — 95 found, 5 missing")
+    - [ ] `missingPhotos` filter becomes active once manifest data is available
+- [ ] "Select Matching" button — replaces selection with filtered markers
+- [ ] "+ Add to Selection" button — adds filtered markers to current selection
+- [ ] Clear all filters button
+- [ ] Results count: "12 of 45 markers match"
 
-- [ ] Implement marker number calculation:
-  - [ ] **Markers are NOT numbered in export file**
-  - [ ] Numbers calculated on-the-fly: Sort all markers by `createdDate` (ascending)
-  - [ ] Assign sequential numbers starting from 1
-  - [ ] Use for folder naming when `--marker-naming number` is specified
-  - [ ] Helper function: `calculateMarkerNumbers(markers)`
+### 7C.7 Browser UI — Action Bar
 
-- [ ] Implement batch processing:
-  - [ ] Process single export file
-  - [ ] Process multiple export files (glob patterns)
-  - [ ] Apply same transformations to all files
-  - [ ] Create backups before modification (optional)
+- [ ] Action buttons rendered from action registry
+- [ ] Disabled state when no selection exists
+- [ ] Selection summary: "5 markers selected . 12 photos affected"
+- [ ] Backup checkbox (create .bak before modifying)
+- [ ] Confirmation dialog for destructive actions (shows what will be removed)
+- [ ] Success/error feedback after action execution
+- [ ] Undo support (restore from backup)
 
-- [ ] Implement interactive mode:
-  - [ ] Prompt for export file(s) or pattern
-  - [ ] Display available transformations (checkbox list)
-  - [ ] Configure each transformation (prompts for parameters)
-  - [ ] Preview changes (show what will be modified)
-  - [ ] Confirm before applying
-  - [ ] Apply transformations with progress tracking
-  - [ ] Show results report
+### 7C.8 Browser UI — Integration & Polish
 
-- [ ] Implement CLI mode with flags:
-  - [ ] `--export <path|pattern>` - Export file(s) to transform
-  - [ ] `--transform <name>` - Transformation to apply (can be repeated)
-  - [ ] `--backup` - Create backup before modifying
-  - [ ] `--dry-run` - Show changes without applying
-  - [ ] `--output-dir <path>` - Save modified exports to different directory
-  - [ ] `--report <path>` - Save transformation report
-  - [ ] Core transformation flags:
-    - [ ] `--remove-photo-data` - Strip imageData property from all photos
-    - [ ] `--extract-photos <dir>` - Extract embedded photos to directory
-    - [ ] `--extract-scheme <by-map|by-marker-description|by-marker-number|flat>` - Organization for extracted photos
-    - [ ] `--marker-naming <description|number>` - How to name marker folders (default: description)
-    - [ ] `--photo-filter <file>` - Text file with photo filenames to extract (one per line)
-    - [ ] `--split-markers` - Split markers with multiple photos into individual markers
-    - [ ] `--split-description-template <template>` - Template for new marker descriptions (default: "{original} - Photo {number}")
-  - [ ] Placeholder transformation flags (basic implementation, not in UI):
-    - [ ] `--rename-map <old>:<new>` - Rename map
-    - [ ] `--remove-map <name>` - Remove map
-    - [ ] `--set-metadata <key>:<value>` - Set custom metadata (not used by SnapSpot PWA)
+- [ ] **Configuration integration:**
+  - [ ] Load paths from `config-manager.js` on page load
+  - [ ] Pre-populate export directory for file picker
+  - [ ] Pre-populate photo extraction output directory
+  - [ ] Show "Configure paths" notice if incomplete
+  - [ ] Link to config page
 
-**Documentation (`README.md`):**
+- [ ] **Photo-finder integration:**
+  - [ ] "Run Photo-Finder" triggers background invocation of Photo Finder CLI via `findPhotosForExport()`
+  - [ ] Photo search directory pre-populated from config (`paths.photosDir`)
+  - [ ] Progress feedback during search (e.g., "Scanning 1,247 files... 45/50 photos found")
+  - [ ] On completion: internal manifest populates the `missingPhotos` filter data
+  - [ ] "Load Manifest" accepts drag-drop or file picker for an existing manifest JSON
+  - [ ] Manifest summary shown: total photos, found, missing, duplicate counts
+  - [ ] Visual indicators update on map (red rings) and tree (warning badges) immediately
 
-- [ ] Tool overview and use cases
-- [ ] List of all available transformations
-- [ ] Interactive mode walkthrough
-- [ ] CLI mode examples for common tasks
-- [ ] How to chain multiple transformations
-- [ ] Photo extraction documentation
-- [ ] Safety features (backups, dry-run)
-- [ ] Troubleshooting section
+- [ ] **Export save workflow:**
+  - [ ] "Save Export" button writes modified export via `lib/snapspot-data/writer.js`
+  - [ ] Auto-creates `.bak` backup before overwriting
+  - [ ] Download modified export as new file (browser download)
+  - [ ] Validation before save
 
----
+- [ ] **Styling (`styles.css`):**
+  - [ ] Follow `shared/styles/variables.css` design tokens
+  - [ ] Follow `shared/styles/common.css` component patterns
+  - [ ] Three-column grid: `250px 1fr 300px` at 1280px+
+  - [ ] Tree indentation with guide lines
+  - [ ] Map container with proper aspect ratio
+  - [ ] Details panel with property grid layout
+  - [ ] Filter bar with horizontal form layout
+  - [ ] Responsive collapse to stacked layout below 1280px (with warning)
+  - [ ] Transition animations for selection state changes
 
-## Example Workflows
+### 7C.9 CLI Tool
 
-**Workflow 1: Remove Embedded Photo Data**
-```bash
-# Remove imageData from all photos (keeps photo objects with metadata)
-node export-transformer.js --export my-site.json --transform removePhotoData
-# Result: Export size reduced, photo objects remain for local serving
+- [ ] **`export-transformer.js`:**
+  - [ ] Import `core/export-transformer/selection-engine.js`
+  - [ ] Import `cli/shared/export-loader.js`, `export-writer.js`
+  - [ ] Import `cli/shared/report-generator.js`
 
-# Use case: Extract photos, remove imageData, serve from local directory
-node export-transformer.js --export my-site.json \
-  --transform extractPhotos --extract-photos ./photos \
-  --transform removePhotoData --backup
-# Result: Photos extracted to ./photos, export has metadata only, SnapSpot serves from ./photos
-```
+- [ ] **CLI flags:**
+  - [ ] `--export <path>` — Export file to transform
+  - [ ] `--filter <id> <params...>` — Apply a filter (repeatable, filters are AND-ed)
+    - [ ] `--filter dateRange --from 2026-01-01 --to 2026-06-01`
+    - [ ] `--filter textSearch --query "Front" --field description`
+    - [ ] `--filter missingPhotos --search <dir>` — Run Photo Finder in background, search directory for photos
+    - [ ] `--filter missingPhotos --manifest <path>` — Use existing Photo Finder manifest JSON file
+    - [ ] `--filter noPhotos`
+    - [ ] `--filter hasEmbeddedData`
+  - [ ] `--action <id> <params...>` — Apply an action to filtered selection (repeatable, sequential)
+    - [ ] `--action deleteMarkers`
+    - [ ] `--action removePhotoData`
+    - [ ] `--action extractPhotos --output ./photos --scheme by-map`
+    - [ ] `--action renameMarkers --find "Old" --replace "New"`
+  - [ ] `--select-all` — Select all markers (no filter needed)
+  - [ ] `--backup` — Create .bak before modifying
+  - [ ] `--dry-run` — Preview only, no modifications
+  - [ ] `--output <path>` — Save modified export to different location
+  - [ ] `--report <path>` — Save transformation report
 
-**Workflow 2: Extract Embedded Photos**
-```bash
-# Extract all photos organized by map
-node export-transformer.js --export my-site.json --transform extractPhotos \
-  --extract-photos ./photos --extract-scheme by-map
-# Creates: ./photos/Floor-1/marker-001-photo-001.jpg
+- [ ] **CLI behavior:**
+  - [ ] If no `--select-all` and no `--filter`, error: "No selection criteria specified"
+  - [ ] Filters combine with AND logic
+  - [ ] Actions execute in order
+  - [ ] Dry-run shows what would happen
+  - [ ] Report shows before/after counts
 
-# Extract organized by marker (using description for folder name)
-node export-transformer.js --export my-site.json --transform extractPhotos \
-  --extract-photos ./photos --extract-scheme by-marker-description \
-  --marker-naming description
-# Creates: ./photos/Floor-1/Front-Entrance/photo-001.jpg
+### 7C.10 Documentation & Testing
 
-# Extract organized by marker (using chronological number for folder name)
-node export-transformer.js --export my-site.json --transform extractPhotos \
-  --extract-photos ./photos --extract-scheme by-marker-number \
-  --marker-naming number
-# Creates: ./photos/Floor-1/marker-001/photo-001.jpg
+- [ ] **`README.md` (CLI tool):**
+  - [ ] Tool overview and design philosophy
+  - [ ] CLI mode examples for common tasks
+  - [ ] All filter references with examples
+  - [ ] All action references with examples
+  - [ ] Photo-finder integration guide
+  - [ ] Safety features (backups, dry-run)
+  - [ ] Troubleshooting section
 
-# Extract to flat directory
-node export-transformer.js --export my-site.json --transform extractPhotos \
-  --extract-photos ./photos --extract-scheme flat
+- [ ] **Unit tests (`core/export-transformer/__tests__/`):**
+  - [ ] Selection state operations (select, deselect, toggle, selectAll, clearAll)
+  - [ ] Filter registration and application (all 6 built-in filters)
+  - [ ] Action registration and execution (all 4 built-in actions)
+  - [ ] Filter AND combination logic
+  - [ ] Action chaining (sequential execution)
+  - [ ] Photo-finder integration (background invocation returns correct manifest)
+  - [ ] Photo-finder integration (loading existing manifest JSON)
+  - [ ] Selection stats calculation
+  - [ ] Plugin registration (custom filter/action)
 
-# Extract photos and remove imageData from export (reduce export size)
-node export-transformer.js --export my-site.json --transform extractPhotos \
-  --extract-photos ./photos --transform removePhotoData
-# Result: Photos in ./photos, export keeps photo metadata only
-```
+- [ ] **Integration tests:**
+  - [ ] Load real export, apply dateRange filter, verify correct markers selected
+  - [ ] Load real export, apply missingPhotos filter with report, verify indicators
+  - [ ] Chain: filter -> deleteMarkers -> verify export valid after save
 
-**Workflow 3: Extract Missing Photos (Photo-Finder Integration)**
-```bash
-# Step 1: Find missing photos with photo-finder
-node photo-finder.js --export my-site.json --photos-dir ./all-photos --report missing.txt
-# Output: missing.txt contains list of missing photo filenames
-
-# Step 2: Extract ONLY those missing photos from export
-node export-transformer.js --export my-site.json --transform extractPhotos \
-  --extract-photos ./recovered --photo-filter missing.txt \
-  --extract-scheme by-marker-number
-# Extracts only the photos listed in missing.txt
-# Useful for recovering photos that were accidentally deleted from disk
-```
-
-**Workflow 4: Split Markers with Multiple Photos**
-```bash
-# Split all markers that have multiple photos
-node export-transformer.js --export my-site.json --transform splitMarkers
-# Original marker keeps first photo, new markers created for remaining photos
-# Default description template: "{original description} - Photo {number}"
-# Note: Creates markers at same coordinates (stacked markers)
-
-# Use custom description template
-node export-transformer.js --export my-site.json --transform splitMarkers \
-  --split-description-template "{original} ({number})"
-# Example: "Front Entrance" → "Front Entrance (1)", "Front Entrance (2)"
-
-# Split and extract photos, remove imageData in one operation
-node export-transformer.js --export my-site.json \
-  --transform splitMarkers \
-  --transform extractPhotos --extract-photos ./photos \
-  --transform removePhotoData
-# Result: Each marker has one photo, photos extracted to files, export size reduced
-```
-
-**Workflow 5: Batch Transform Multiple Exports**
-```bash
-# Remove photo data from all exports in directory (each export = 1 map)
-node export-transformer.js --export "./exports/*.json" --transform removePhotoData \
-  --output-dir ./cleaned
-
-# Extract photos from multiple exports
-node export-transformer.js --export "./exports/*.json" --transform extractPhotos \
-  --extract-photos ./all-photos --extract-scheme by-map
-```
-
-**Workflow 6: Chain Multiple Transformations**
-```bash
-# Split markers, then extract photos, remove imageData from export
-node export-transformer.js --export my-site.json \
-  --transform splitMarkers \
-  --transform extractPhotos --extract-photos ./photos \
-  --transform removePhotoData --backup
-# Result: Each marker has one photo with meaningful description, photos extracted to files
-```
-
-**Workflow 7: Browser UI - Command Builder**
-```
-1. Open tools/export-transformer-ui/ in browser
-2. Select export file: ./my-site.json
-3. Check "Extract Photos" transformation
-4. Configure extraction:
-   - Output: ./recovered-photos (pre-filled from config)
-   - Scheme: by-marker-number
-   - Marker naming: number
-5. Import photo-finder report (missing.txt)
-6. Click "Generate Command"
-7. Copy generated command:
-   node export-transformer.js --export ./my-site.json \
-     --transform extractPhotos --extract-photos ./recovered-photos \
-     --extract-scheme by-marker-number --marker-naming number \
-     --photo-filter missing.txt
-8. Run command in terminal
-```
+- [ ] **Manual testing (Browser UI):**
+  - [ ] Export load and tree rendering
+  - [ ] Map marker rendering with all visual states
+  - [ ] Click/Shift+click selection sync (tree <-> map <-> details)
+  - [ ] Filter application and visual feedback
+  - [ ] Photo-finder report loading
+  - [ ] Action execution with confirmation
+  - [ ] Export save and backup creation
+  - [ ] Configuration pre-population
+  - [ ] Responsive layout at 1280px and 1920px
 
 ---
 
 ## Acceptance Criteria
 
-**CLI Tool:**
-- [ ] All transformations work correctly
-- [ ] Can apply multiple transformations in sequence
-- [ ] Dry-run mode shows accurate preview
-- [ ] Backups created when requested
-- [ ] Batch processing works for multiple files
-- [ ] Modified exports are valid (pass validation)
-- [ ] Reports show all changes made
-- [ ] Works in both interactive and CLI modes
-- [ ] **Photo extraction creates valid JPEG files**
-- [ ] **Extracted photos match original embedded data (hash verification)**
-- [ ] **Photo data removal strips only `imageData` property**
-- [ ] **Photo objects remain with complete metadata after data removal**
-- [ ] **All organization schemes work correctly** (by-map, by-marker-description, by-marker-number, flat)
-- [ ] **Marker numbers calculated correctly** (chronological by createdDate)
-- [ ] **Filename filtering works** (extracts only specified photos)
-- [ ] **Photo-filter file parsed correctly** (one filename per line)
-- [ ] **Marker splitting works correctly:**
-  - [ ] Markers with 2+ photos split into individual markers
-  - [ ] New markers have unique IDs and correct positions (same x,y as original)
-  - [ ] Description template applied correctly
-  - [ ] Chronological order maintained
-- [ ] **Placeholder transformations have basic implementation** (rename/remove map, set metadata)
+### Core Engine
+- [ ] Selection state is the single source of truth; tree, map, and details all reflect it
+- [ ] All 6 built-in filters work correctly
+- [ ] All 4 built-in actions work correctly
+- [ ] Filters combine with AND logic
+- [ ] Actions chainable in sequence
+- [ ] Plugin system works: adding a new filter/action requires no changes to selection engine
 
-**Browser UI:**
-- [ ] Loads and parses export files correctly
-- [ ] All transformation options available in UI
-- [ ] Configuration values pre-populate paths
-- [ ] Command builder generates valid CLI commands
-- [ ] Photo-finder report import works
-- [ ] Preview shows accurate transformation results
-- [ ] Copy-to-clipboard works for generated commands
-- [ ] Responsive layout for all screen sizes
-- [ ] Clear error messages for invalid inputs
-- [ ] Link to configuration page works
+### Browser UI
+- [ ] Export loads and tree renders correctly
+- [ ] Map shows markers with correct visual states
+- [ ] Click marker on map -> tree highlights, details update
+- [ ] Check marker in tree -> map highlights, details update
+- [ ] Filter bar generates correct filter config from plugin `config` schema
+- [ ] "Select Matching" updates selection and all panels
+- [ ] Photo-finder background invocation works and populates `missingPhotos` filter
+- [ ] Existing manifest JSON can be loaded as alternative to background invocation
+- [ ] Actions execute correctly with confirmation for destructive ones
+- [ ] Export saves with backup
+- [ ] Modified export passes validation
+- [ ] Configuration paths pre-populate
+- [ ] Layout works at 1280px+
+
+### CLI Tool
+- [ ] All filter flags parse correctly
+- [ ] All action flags parse correctly
+- [ ] `--dry-run` shows accurate preview
+- [ ] `--backup` creates .bak file
+- [ ] Modified exports pass validation
+- [ ] Batch processing (glob patterns) works
+
+### Photo Data Removal
+- [ ] Strips only `imageData` property
+- [ ] Photo objects remain with `id`, `filename`, `imageHash`, `markerId`, `createdDate`
+- [ ] Export file size significantly reduced
+- [ ] Export remains valid
+
+### Photo Extraction
+- [ ] Creates valid JPEG files from Base64 data
+- [ ] Hash verification confirms extracted photos match original
+- [ ] Organization schemes work: `by-map`, `by-marker-description`, `by-marker-number`, `flat`
+- [ ] Marker numbers calculated correctly (chronological by `createdDate`)
+- [ ] Filename filtering via photo-finder integration works
+
+### Performance
+- [ ] Load and render export with 500 markers: <2 seconds
+- [ ] Apply filter on 500 markers: <50ms
+- [ ] Tree expand/collapse 500 markers: <100ms
+- [ ] Extract 100 photos: <10 seconds
+- [ ] Memory usage: <500MB for 10K photos
 
 ---
 
-## Testing Plan
+## Example Workflows
 
-### Unit Tests (CLI Tool)
+### Workflow 1: Clean Up Merged Export (Primary Use Case)
 
-**Scenario 1: Remove Photo Data (imageData only)**
-- [ ] Export with 50 photos (large file)
-- [ ] Apply removePhotoData transformation
-- [ ] Result file much smaller
-- [ ] Maps and markers intact
-- [ ] **Photo objects remain** with all metadata
-- [ ] Only `imageData` property removed from each photo
-- [ ] Export still valid (passes validation)
-- [ ] Photo objects have: `id`, `filename`, `imageHash`, `markerId`, `createdDate`
+**Scenario:** You merged exports from multiple field workers. You want to keep only markers placed by you (for which you have the source photos).
 
-**Scenario 2: Placeholder Transformations (Basic Implementation)**
-- [ ] Export with multiple maps
-- [ ] Apply renameMap (single map rename)
-- [ ] Verify map name changed
-- [ ] Apply removeMap
-- [ ] Verify map and all markers removed
-- [ ] Apply setCustomMetadata
-- [ ] Verify metadata added to export
-- [ ] **Note:** These are not in UI - CLI only for now
+```
+1. Open Export Transformer in browser
+2. Load merged export: "Kaart Caestert 2026-06-03.json"
+3. Click "Run Photo-Finder" — select the directory containing your source photos
+   -> Photo Finder scans in background, finds 11 of 45 photo sets
+   -> Map shows red rings around 34 markers with missing photos
+   -> Tree shows ! badges on affected markers
+   -> Filter summary: "34 of 45 markers have missing photos"
+4. Click filter "Missing Photos" -> click "Select Matching"
+   -> 34 of 45 markers selected (all the ones without source photos)
+5. Review selection on map and in tree
+6. Click "Delete Selected Markers"
+7. Confirm: "Delete 34 markers and their photos?"
+8. Save export as "Kaart Caestert (cleaned).json"
+   -> Result: Export with only 11 markers — all your own work
+```
 
-**Scenario 3: Batch Transformation**
-- [ ] 3 export files in directory
-- [ ] Apply same transformation to all
-- [ ] All files modified correctly
-- [ ] Backups created for all files
+### Workflow 2: Extract Photos Before Archiving
 
-**Scenario 4: Dry-Run Mode**
-- [ ] Run transformation with --dry-run
-- [ ] Shows what would change
-- [ ] No files actually modified
-- [ ] Report accurate preview
+```
+1. Load export
+2. Select all markers (checkbox at export level)
+3. Click "Extract Photos"
+4. Choose output directory, scheme: "by-marker-description"
+5. Execute -> photos extracted to organized folder structure
+6. Click "Remove Photo Data" -> strips imageData, keeps metadata
+7. Save export -> lightweight file for sharing, SnapSpot serves from local dir
+```
 
-**Scenario 5: Split Markers with Multiple Photos**
-- [ ] Export with 5 markers, 3 have multiple photos (2, 3, 4 photos each)
-- [ ] Apply splitMarkers transformation
-- [ ] Original markers keep first photo
-- [ ] New markers created: 1 + 2 + 3 = 6 new markers
-- [ ] Total markers after split: 5 + 6 = 11 markers
-- [ ] All new markers have correct position (same as original)
-- [ ] All new markers have unique IDs (UUID format)
-- [ ] Description template applied: "{original} - Photo {number}"
-- [ ] createdDate incremented to maintain chronological order
+### Workflow 3: Date-Based Cleanup
 
-**Scenario 5a: Chain Split and Extract**
-- [ ] Export with markers having multiple photos
-- [ ] Chain: splitMarkers → extractPhotos → removePhotoData
-- [ ] All markers now have single photo
-- [ ] Photos extracted to JPEG files
-- [ ] Export has photo metadata only (no imageData)
-- [ ] Export file size reduced
-- [ ] All operations applied correctly
+```
+1. Load export
+2. Set date filter: From 2026-05-01, To 2026-05-15
+3. Click "Select Matching" -> old markers selected
+4. Delete selected -> remove outdated work
+```
 
-**Scenario 6: Extract Photos (by-map)**
-- [ ] Export with 3 maps, 20 embedded photos (Base64)
-- [ ] Apply extractPhotos transformation
-- [ ] Use --extract-scheme by-map
-- [ ] Creates 3 directories (one per map)
-- [ ] All 20 photos extracted as JPEG files
-- [ ] Original filenames preserved
-- [ ] Mapping file created (photo ID → filename → path)
+### Workflow 4: Find Markers Without Photos
 
-**Scenario 7: Extract Photos (by-marker-description)**
-- [ ] Export with 10 markers with descriptions
-- [ ] Apply extractPhotos with --extract-scheme by-marker-description
-- [ ] Creates nested map/marker directories using descriptions
-- [ ] All photos in correct marker directories
-- [ ] Folder names sanitized for filesystem (no invalid chars)
+```
+1. Load export
+2. Click filter "No Photos"
+3. Click "Select Matching" -> empty markers selected
+4. Delete selected -> clean up markers that were never documented
+```
 
-**Scenario 8: Extract Photos (by-marker-number)**
-- [ ] Export with 10 markers (unsorted createdDate)
-- [ ] Apply extractPhotos with --extract-scheme by-marker-number
-- [ ] Calculates marker numbers (sort by createdDate)
-- [ ] Creates folders with chronological numbers (marker-001, marker-002, etc.)
-- [ ] Correct photos in correct numbered folders
+### Workflow 5: CLI Automation
 
-**Scenario 9: Extract and Remove Photo Data**
-- [ ] Export with 50 embedded photos (large file)
-- [ ] Chain extractPhotos → removePhotoData
-- [ ] Photos extracted to JPEG files successfully
-- [ ] Export file modified to remove `imageData` from photo objects
-- [ ] Photo objects remain with metadata
-- [ ] Export file size significantly reduced
-- [ ] Both export and JPEG files validated
+```bash
+# Delete all markers with missing photos (run Photo Finder in background)
+node export-transformer.js \
+  --export "./exports/*.json" \
+  --filter missingPhotos --search ./my-photos \
+  --action deleteMarkers \
+  --backup --output ./cleaned/
 
-**Scenario 10: Photo Filename Filtering**
-- [ ] Export with 100 embedded photos
-- [ ] Create filter file with 10 specific filenames
-- [ ] Use --photo-filter flag
-- [ ] Only 10 photos extracted (matching filter)
-- [ ] Other 90 photos remain in export
-- [ ] Extraction report lists filtered photos
+# Delete markers with missing photos (using existing manifest)
+node export-transformer.js \
+  --export my-site.json \
+  --filter missingPhotos --manifest ./photo-finder-manifest.json \
+  --action deleteMarkers \
+  --backup
 
-**Scenario 11: Photo-Finder Integration**
-- [ ] Run photo-finder to generate missing.txt (5 missing photos)
-- [ ] Use missing.txt as --photo-filter
-- [ ] Extract only those 5 photos from export
-- [ ] Recovered photos match original filenames
-- [ ] Recovered photos have correct hashes
+# Extract photos for all markers, then strip imageData (lightweight export)
+node export-transformer.js \
+  --export my-site.json \
+  --select-all \
+  --action extractPhotos --output ./photos --scheme by-marker-description \
+  --action removePhotoData \
+  --backup
 
-### Manual Testing (Browser UI)
-
-**Test 1: Configuration Integration**
-
-**How to Test:**
-1. Open `tools/export-transformer-ui/` in browser
-2. Verify configuration notice appears if not configured
-3. Click "Configure Paths" link
-4. Set `exportsDir` and `photosDir` in config UI
-5. Return to export-transformer UI
-6. Verify paths pre-populated in input fields
-
-**Expected Results:**
-- ✅ Configuration values loaded correctly
-- ✅ Paths pre-populated in form fields
-- ✅ Link to config page works
-
-**Test 2: Export File Loading**
-
-**How to Test:**
-1. Select single export file
-2. Verify export summary displays (maps count, markers count, photos count)
-3. Select multiple exports with pattern (*.json)
-4. Verify file list preview shows
-
-**Expected Results:**
-- ✅ Export parsed successfully
-- ✅ Summary displays correct counts
-- ✅ Pattern matching shows file list
-
-**Test 3: Transformation Configuration**
-
-**How to Test:**
-1. Check "Extract Photos" transformation
-2. Configure extraction options:
-   - Output directory (use pre-filled value)
-   - Scheme: by-marker-number
-   - Marker naming: number
-3. Verify configuration panel updates
-
-**Expected Results:**
-- ✅ All options available in UI
-- ✅ Configuration panel shows/hides correctly
-- ✅ Default values pre-populated
-
-**Test 4: Photo-Finder Report Import**
-
-**How to Test:**
-1. Create test photo-finder report (missing.txt with 5 filenames)
-2. Click "Import Photo-Finder Report" button
-3. Select missing.txt file
-4. Verify filename filter populated with 5 filenames
-
-**Expected Results:**
-- ✅ Report file parsed correctly
-- ✅ Filename filter populated
-- ✅ One filename per line in text area
-
-**Test 5: Command Builder**
-
-**How to Test:**
-1. Configure transformation (Extract Photos)
-2. Set all options (scheme, marker naming, photo filter)
-3. Click "Generate Command"
-4. Verify command appears in code block
-5. Click "Copy to Clipboard"
-6. Paste in text editor to verify
-
-**Expected Results:**
-- ✅ Command syntax correct
-- ✅ All flags included
-- ✅ Paths properly escaped/quoted
-- ✅ Copy-to-clipboard works
-- ✅ Example: `node export-transformer.js --export ./my-site.json --transform extractPhotos --extract-photos ./photos --extract-scheme by-marker-number --marker-naming number --photo-filter missing.txt`
-
-**Test 6: Preview Panel**
-
-**How to Test:**
-1. Load export with 3 maps, 50 photos
-2. Configure "Extract Photos" with filter (10 filenames)
-3. Click "Preview"
-4. Verify preview shows:
-   - 3 maps affected
-   - 10 photos to be extracted (filtered list)
-   - Output directory structure
-
-**Expected Results:**
-- ✅ Preview shows accurate summary
-- ✅ Photo count matches filter
-- ✅ Directory structure preview correct
-
-**Test 7: Split Markers Configuration**
-
-**How to Test:**
-1. Load export with markers having multiple photos
-2. Check "Split Markers" transformation
-3. Enter description template: "{original} ({number})"
-4. Click "Preview"
-5. Verify preview shows:
-   - Number of markers to be split
-   - Example descriptions for split markers
-6. Generate command
-
-**Expected Results:**
-- ✅ Preview shows accurate split count
-- ✅ Example descriptions rendered correctly
-- ✅ Command includes split flags
-- ✅ Example: `--transform splitMarkers --split-description-template "{original} ({number})"`
-
-**Test 7a: Multiple Transformations Chain**
-
-**How to Test:**
-1. Check "Split Markers"
-2. Check "Extract Photos"
-3. Configure extraction with "extract-and-remove"
-4. Verify both transformations listed in order
-5. Generate command
-
-**Expected Results:**
-- ✅ Multiple transformations configurable
-- ✅ Order preserved
-- ✅ Command includes all transformations
-- ✅ Example: `--transform splitMarkers --transform extractPhotos --extract-photos ./photos --extract-and-remove`
-
-**Test 8: Responsive Layout**
-
-**How to Test:**
-1. Test at 1280px width (minimum supported)
-2. Test at 1920px width (maximum tested)
-3. Verify all panels visible and accessible
-
-**Expected Results:**
-- ✅ All UI elements accessible at all widths
-- ✅ No horizontal scrolling
-- ✅ Clear visual hierarchy maintained
-
-### Performance Tests
-- [ ] Transform single export: <100ms
-- [ ] Batch 100 exports: <10 seconds
-- [ ] Extract 1000 photos: <30 seconds
-- [ ] Extract with filter (1000 photos, 50 in filter): <5 seconds
-- [ ] Calculate marker numbers (1000 markers): <10ms
-- [ ] Split markers (100 markers with avg 3 photos each): <1 second
-- [ ] Memory usage <500MB for 10k photos
+# Remove markers older than a date (preview first)
+node export-transformer.js \
+  --export my-site.json \
+  --filter dateRange --to 2026-01-01 \
+  --action deleteMarkers \
+  --dry-run
+```
 
 ---
 
 ## Implementation Notes
 
-### Marker Number Calculation
+### Selection State Architecture
 
-**Important:** Marker numbers are NOT stored in the SnapSpot export file. They are calculated on-the-fly.
-
-**Algorithm:**
-```javascript
-function calculateMarkerNumbers(markers) {
-  // Sort markers by createdDate (ascending) - earliest first
-  const sorted = markers.slice().sort((a, b) => 
-    new Date(a.createdDate) - new Date(b.createdDate)
-  )
-  
-  // Assign sequential numbers starting from 1
-  const markerNumbers = new Map()
-  sorted.forEach((marker, index) => {
-    markerNumbers.set(marker.id, index + 1)
-  })
-  
-  return markerNumbers
-}
+```
+                    SelectionState
+                   (Set-based, pub/sub)
+                   +-----------------+
+                   | selectedMarkerIds|
+                   | selectedPhotoIds |
+                   | subscribers[]    |
+                   +-------+---------+
+                           | notify()
+          +----------------+----------------+
+          v                v                v
+      TreeView         MapView        DetailsPanel
+   (checkbox sync)  (dot colors)    (property display)
 ```
 
-**Usage in folder naming:**
-- When `--marker-naming number` specified
-- When `--extract-scheme by-marker-number` specified
-- Folder names: `marker-001`, `marker-002`, etc. (zero-padded)
+All three panels subscribe to the same `SelectionState` instance. When selection changes, all panels update. No panel directly modifies another panel's state.
 
-### Photo Extraction Process
-
-### Photo Extraction Process
+### Tree Data Model
 
 ```javascript
-async function extractPhotosToFiles(exportData, outputDir, options) {
-  const { 
-    scheme = 'by-map', 
-    markerNaming = 'description',
-    photoFilter = null  // Optional: array of filenames to extract
-  } = options
-  
-  // Calculate marker numbers (chronological by createdDate)
-  const markerNumbers = calculateMarkerNumbers(exportData.markers)
-  
-  for (const map of exportData.maps) {
-    for (const marker of map.markers) {
-      // Get marker identifier (number or description)
-      const markerNum = markerNumbers.get(marker.id)
-      const markerFolder = markerNaming === 'number' 
-        ? `marker-${String(markerNum).padStart(3, '0')}`
-        : sanitizeFilename(marker.description)
-      
-      for (const photo of marker.photos) {
-        // Apply filename filter if provided
-        if (photoFilter && !photoFilter.includes(photo.filename)) {
-          continue  // Skip photos not in filter
-        }
-        
-        // Get base64 data
-        const base64Data = photo.imageData
-        
-        // Convert to blob using lib/snapspot-image/converter.js
-        const blob = await base64ToBlob(base64Data)
-        
-        // Determine output path based on scheme
-        const outputPath = getOutputPath(scheme, map, markerFolder, photo)
-        
-        // Write JPEG file
-        await fs.writeFile(outputPath, Buffer.from(await blob.arrayBuffer()))
-        
-        // Verify with hash
-        const hash = await generateImageHash(blob)
-        if (hash !== photo.imageHash) {
-          console.warn(`Hash mismatch for ${photo.filename}`)
-        }
-      }
-    }
-  }
-}
-
-function sanitizeFilename(str) {
-  // Replace invalid filename characters with dashes
-  return str.replace(/[<>:"/\\|?*]/g, '-').replace(/\s+/g, '-')
-}
-```
-
-### Photo Filter Format
-
-**Text file (one filename per line):**
-```
-photo-001.jpg
-photo-002.jpg
-IMG_1234.jpg
-DSC_5678.jpg
-```
-
-**Generated by photo-finder:**
-```bash
-# photo-finder creates missing.txt
-node photo-finder.js --export site.json --photos-dir ./photos --report missing.txt
-
-# Use missing.txt to extract only missing photos
-node export-transformer.js --export site.json --transform extractPhotos \
-  --extract-photos ./recovered --photo-filter missing.txt
-```
-
-### Directory Schemes
-
-**by-map:**
-```
-output/
-  Floor-1/
-    marker-001-photo-001.jpg
-    marker-001-photo-002.jpg
-    marker-002-photo-001.jpg
-  Floor-2/
-    marker-003-photo-001.jpg
-```
-
-**by-marker-description (using marker description):**
-```
-output/
-  Floor-1/
-    Front-Entrance/
-      photo-001.jpg
-      photo-002.jpg
-    Back-Exit/
-      photo-001.jpg
-  Floor-2/
-    Stairwell/
-      photo-001.jpg
-```
-
-**by-marker-number (using chronological marker numbers):**
-```
-output/
-  Floor-1/
-    marker-001/
-      photo-001.jpg
-      photo-002.jpg
-    marker-002/
-      photo-001.jpg
-  Floor-2/
-    marker-003/
-      photo-001.jpg
-```
-
-**flat:**
-```
-output/
-  photo-001.jpg
-  photo-002.jpg
-  photo-003.jpg
-  (uses hash suffix for collisions: photo-001-a1b2c3.jpg)
-```
-
-### Marker Naming Strategy
-
-**Description-based naming:**
-- Pro: Human-readable folder names
-- Con: Descriptions may contain invalid filesystem characters
-- Solution: Sanitize (replace `<>:"/\|?*` with `-`)
-- Example: `"Front Entrance (Main)"` → `Front-Entrance-Main`
-
-**Number-based naming:**
-- Pro: Consistent, filesystem-safe
-- Con: Less human-readable
-- Solution: Zero-padded sequential numbers
-- Example: `marker-001`, `marker-002`, etc.
-- Numbers calculated by sorting markers by `createdDate` (ascending)
-
-### Marker Splitting Process
-
-**Use Case:** In the field, it's quicker to place one marker and add multiple photos. Later, split these markers so each has one photo with a meaningful description.
-
-**Algorithm:**
-```javascript
-function splitMarkersWithMultiplePhotos(exportData, options) {
-  const { descriptionTemplate = '{original} - Photo {number}' } = options
-  const newMarkers = []
-  const splitReport = []
-  
-  for (const map of exportData.maps) {
-    const markersToProcess = map.markers.filter(m => m.photos.length > 1)
-    
-    for (const marker of markersToProcess) {
-      // Keep first photo in original marker
-      const firstPhoto = marker.photos[0]
-      const remainingPhotos = marker.photos.slice(1)
-      
-      // Create new markers for remaining photos
-      remainingPhotos.forEach((photo, index) => {
-        const newMarker = {
-          id: crypto.randomUUID(),
-          mapId: marker.mapId,
-          x: marker.x,  // Same position as original
-          y: marker.y,
-          description: descriptionTemplate
-            .replace('{original}', marker.description)
-            .replace('{number}', index + 2),  // Photo 2, 3, 4, etc.
-          photoIds: [photo.id],
-          photos: [photo],
-          createdDate: new Date(
-            new Date(marker.createdDate).getTime() + (index + 1) * 1000
-          ).toISOString(),  // Increment by 1 second to maintain order
-          number: null  // Calculated on display
-        }
-        newMarkers.push(newMarker)
-      })
-      
-      // Update original marker to have only first photo
-      marker.photos = [firstPhoto]
-      marker.photoIds = [firstPhoto.id]
-      
-      splitReport.push({
-        originalId: marker.id,
-        originalDescription: marker.description,
-        photoCount: remainingPhotos.length + 1,
-        newMarkersCreated: remainingPhotos.length
-      })
-    }
-    
-    // Add new markers to map
-    map.markers.push(...newMarkers)
-  }
-  
-  return { exportData, splitReport }
-}
-```
-
-**Example:**
-- **Before:** 1 marker "Equipment Room" with 3 photos
-- **After:** 
-  - Marker 1: "Equipment Room - Photo 1" (original position)
-  - Marker 2: "Equipment Room - Photo 2" (same position)
-  - Marker 3: "Equipment Room - Photo 3" (same position)
-
-**Benefits:**
-- Better organization for field documentation
-- Each photo can have specific description later in SnapSpot app
-- Easier to reference individual photos
-- More informative when viewing markers on map
-
-### Stacked Markers UI Considerations (SnapSpot PWA)
-
-**Challenge:** Split markers at identical coordinates appear as one marker in SnapSpot app.
-
-**Context:**
-- Marker splitting creates new markers at same `x,y` position as original
-- SnapSpot PWA needs UI to access individual stacked markers
-- User should be able to select which marker to open
-
-**UI Implementation Options:**
-
-**Option A: Circular Spread (Recommended for Phase 2)**
-- Click stack → Markers spread out in circle → Click individual marker → Collapse back
-- **Pros:** Visual, intuitive, maintains spatial context, looks polished
-- **Cons:** More complex (animation, collision detection, spread radius calculation)
-- **Implementation:** Medium-High complexity
-
-**Option B: Modal List (Recommended for Phase 1)**
-- Click stack → Modal appears with list of markers → Click marker in list → Modal closes
-- **Pros:** Simple implementation, can show photo thumbnails and descriptions
-- **Cons:** Takes user out of map context, extra click to close
-- **Implementation:** Low complexity
-- **UI:** Similar to photo gallery selection (familiar pattern)
-
-**Option C: Popup Menu (Alternative)**
-- Click stack → Popup menu at marker with mini cards → Click card → Opens marker
-- **Pros:** Simpler than circular spread, keeps spatial context, shows previews
-- **Cons:** Boundary detection needed, limited space for many markers
-- **Implementation:** Low-Medium complexity
-
-**Recommended Approach:**
-1. **Phase 1:** Implement Modal List (quick, gets functionality working)
-2. **Phase 2:** Add Circular Spread as UX enhancement (better user experience)
-
-**Note:** SnapSpot PWA modifications are outside Phase 7C scope. Document here for future implementation.
-
-### Photo Data Removal vs Photo Object Removal
-
-**Important distinction:**
-
-**Remove Photo Data (`removePhotoData`):**
-```javascript
-// BEFORE
+// The tree renders this derived structure — built from exportData + selection + filter results
 {
-  "id": "photo-123",
-  "filename": "IMG_001.jpg",
-  "imageData": "data:image/jpeg;base64,/9j/4AAQ...", // ~500KB
-  "imageHash": "a1b2c3d4...",
-  "markerId": "marker-456",
-  "createdDate": "2026-02-03T10:30:00Z"
-}
-
-// AFTER removePhotoData
-{
-  "id": "photo-123",
-  "filename": "IMG_001.jpg",
-  // imageData removed
-  "imageHash": "a1b2c3d4...",
-  "markerId": "marker-456",
-  "createdDate": "2026-02-03T10:30:00Z"
+  type: 'export',
+  label: 'Kaart Caestert (2026-06-03)',
+  children: [{
+    type: 'map',
+    label: 'Kaart Caestert',
+    markerCount: 45,
+    photoCount: 112,
+    children: [{
+      type: 'marker',
+      id: 'uuid-...',
+      label: 'Front Entrance',
+      photoCount: 3,
+      date: '2026-05-12',
+      status: 'ok',       // 'ok' | 'missing-photos' | 'no-embedded-data'
+      selected: false,
+      filtered: false,    // Matches active filter?
+      children: [{
+        type: 'photo',
+        id: 'uuid-...',
+        label: 'IMG_2401.jpg',
+        size: '2.4 MB',
+        status: 'found',  // 'found' | 'missing' | 'unknown'
+        selected: false
+      }, ...]
+    }, ...]
+  }]
 }
 ```
 
-**Use Cases:**
-- Export for sharing (smaller file size)
-- Local serving workflow:
-  1. Extract photos to `./photos` directory
-  2. Remove imageData from export
-  3. SnapSpot PWA serves photos from local directory using `filename`
-  4. High-quality photos + lightweight export
-- Hybrid workflow: Export for backup, local photos for viewing
+### CanvasRenderer Reuse
 
-**Implementation:**
+The `CanvasRenderer` from `shared/utils/canvas-helpers.js` handles:
+- Image loading and rendering
+- Pan and zoom with mouse wheel + drag
+- Coordinate transformation (screen <-> world)
+- Redraw callbacks for overlays
+
+The `MapView` class wraps it and adds:
+- Marker drawing with visual states (color, size, ring)
+- Click detection (distance from marker center)
+- Tooltip on hover
+- Selection sync with `SelectionState`
+
+### Photo-Finder Integration
+
+The Export Transformer integrates with Photo Finder in two ways:
+
+**1. Background invocation (primary flow):**
+- Calls `findPhotosForExport()` from the Photo Finder CLI programmatically
+- Receives the internal manifest via `generateInternalManifest()` — the same API Organizer uses
+- Photo search directory is pre-populated from config (`paths.photosDir`)
+- Shows progress while scanning
+
+**2. Load existing manifest (cached/offline flow):**
+- User can load a previously-saved Photo Finder manifest JSON file
+- Useful when photos are on an external drive that isn't currently connected
+- Manifest captures the last-known state of photo locations
+
+**Internal manifest format (from Photo Finder):**
 ```javascript
-function removePhotoData(exportData) {
-  // SnapSpot export contains exactly one map
-  const map = exportData.maps[0]
-  
-  for (const marker of map.markers) {
-    for (const photo of marker.photos) {
-      // Remove only imageData property
-      delete photo.imageData
-      // Keep all other properties: id, filename, imageHash, markerId, createdDate
-    }
-  }
-  
-  return exportData
+{
+  export: { path, name, summary },
+  search: { directories, options },
+  results: { found: 95, missing: 5, duplicates: 2 },
+  photos: [
+    { filename: 'IMG_2401.jpg', markerId: 'uuid', status: 'found',
+      foundPath: '/photos/2026-01/IMG_2401.jpg' },
+    { filename: 'IMG_2403.jpg', markerId: 'uuid', status: 'missing',
+      foundPath: null },
+    // ...
+  ]
 }
 ```
+
+This data feeds the `missingPhotos` filter and the visual indicators on map/tree.
+
+### Directory Schemes (Photo Extraction)
+
+- **`by-map`:** `output/MapName/photo-001.jpg`
+- **`by-marker-description`:** `output/MapName/Front-Entrance/photo-001.jpg`
+- **`by-marker-number`:** `output/MapName/marker-001/photo-001.jpg`
+- **`flat`:** `output/photo-001.jpg` (hash suffix for collisions)
 
 ---
 
-## Future Considerations
+## Future Extensions (Post-7C)
 
-### Format Transformation (Phase 7F or later)
+The plugin architecture makes these straightforward:
 
-The Export Transformer architecture is designed to support **format transformation** to other applications using mapping files.
-
-**Concept:**
-```json
-{
-  "targetFormat": "OtherApp v2.0",
-  "propertyMapping": {
-    "map.name": "floor.title",
-    "map.imageData": "floor.blueprint",
-    "marker.x": "point.coordinates.x",
-    "marker.y": "point.coordinates.y",
-    "marker.description": "point.label",
-    "photo.imageData": "attachment.data"
-  },
-  "transformations": {
-    "coordinates": "invert_y_axis",
-    "dates": "unix_timestamp"
-  }
-}
-```
-
-**Use Cases:**
-- Export SnapSpot data to CAD applications
-- Import into facility management software
-- Generate reports for other documentation systems
-- Archive in standardized formats
-
-**Implementation:**
-- CLI flag: `--format-mapping <file.json>`
-- Browser UI: Format template selector
-- Reuse existing parsing/writing infrastructure
-- Add property transformation layer
-
-**Not in Phase 7C scope** - document for future reference.
+- **New filters:** `hasDescription`, `photoCount` (range), `coordinateBounds` (map lasso), `customField`
+- **New actions:** `mergeMarkers` (combine selected into one), `duplicateMarkers`, `setCustomMetadata`, `exportCSV`
+- **Format transformation:** Add a `transformFormat` action that uses mapping files for CAD/FM app export
+- **Marker splitting:** Revisit when SnapSpot PWA supports stacked marker UI (the action would be trivial to add to the plugin registry)
 
 ---
 
@@ -1076,4 +762,4 @@ The Export Transformer architecture is designed to support **format transformati
 
 After completing Phase 7C:
 - Proceed to [Phase 7D: Organizer Tool](PHASE_7D_ORGANIZER.md)
-- Extract transformation can be used before Organizer if needed
+- Photo extraction from Export Transformer can feed into Organizer for archival
